@@ -3,33 +3,118 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Over the Bags — Hold the Line</title>
+<title>Over the Bags — Trench Command</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Staatliches&family=Special+Elite&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-<!-- ============ START MENU ============ -->
+<!-- ============ MAIN MENU ============ -->
 <div id="menu-screen" class="overlay visible">
   <div class="menu-inner">
-    <div class="menu-kicker">WESTERN FRONT &middot; 1917 &middot; SECTOR 7</div>
+    <div class="menu-kicker">WESTERN FRONT &middot; 1917</div>
     <h1 class="menu-title">OVER<span class="title-rule"></span>THE BAGS</h1>
-    <div class="menu-sub">A TRENCH COMMAND OPERATION</div>
+    <div class="menu-sub">A TRENCH COMMAND CAMPAIGN</div>
     <div class="menu-brief">
-      <p>Four soldiers. One trench. The enemy is coming across no man's land.</p>
-      <p>Hold the line through five assaults &mdash; then take them over the bags.</p>
+      <p>Command a section of the line through three sectors. Muster your men,</p>
+      <p>equip them for the work, call the guns &mdash; and bring the survivors home.</p>
     </div>
-    <button id="btn-begin" class="btn btn-big">BEGIN COMMAND</button>
-    <div class="menu-note">Music begins on command. Click a soldier to select &middot; click ground to move.</div>
+    <div class="menu-buttons">
+      <button id="btn-new" class="btn btn-big">NEW CAMPAIGN</button>
+      <button id="btn-continue" class="btn btn-big" hidden>CONTINUE CAMPAIGN</button>
+    </div>
+    <div id="diff-row" hidden>
+      <div class="diff-title">SELECT THE WAR YOU WANT</div>
+      <button class="btn btn-diff" data-diff="recruit">RECRUIT<span>Slower enemy, generous supplies.</span></button>
+      <button class="btn btn-diff" data-diff="regular">REGULAR<span>The intended experience.</span></button>
+      <button class="btn btn-diff" data-diff="veteran">VETERAN<span>Thin supplies. Merciless, but fair.</span></button>
+    </div>
+    <button id="btn-reset" class="btn btn-small btn-danger" hidden>RESET CAMPAIGN</button>
+    <div class="menu-note">Music begins on your first click.</div>
   </div>
 </div>
 
-<!-- ============ GAME ============ -->
+<!-- ============ CAMPAIGN MAP ============ -->
+<div id="campaign-screen" class="overlay">
+  <div id="campaign-inner">
+    <header class="camp-head">
+      <div class="topbar-title">THE FRONT</div>
+      <div class="topbar-stats">
+        <div class="stat"><span class="stat-label">MANPOWER</span><span id="camp-manpower" class="stat-value brass">0</span></div>
+        <div class="stat"><span class="stat-label">REQUISITION</span><span id="camp-rp" class="stat-value brass">0</span></div>
+        <div class="stat"><span class="stat-label">DOCTRINE</span><span id="camp-diff" class="stat-value">REGULAR</span></div>
+      </div>
+      <button id="btn-to-menu" class="btn btn-small" onclick="Camp.toMenu()">MENU</button>
+    </header>
+    <div class="camp-body">
+      <div id="map-paper">
+        <svg id="map-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <path d="M 8,78 C 20,70 26,56 38,52 C 50,48 56,34 68,32 C 78,30 86,42 94,38"
+                class="map-frontline"></path>
+          <path d="M 6,84 C 20,77 28,62 40,58 C 52,54 58,40 70,38 C 80,36 88,48 96,44"
+                class="map-ourline"></path>
+        </svg>
+        <div class="map-compass">N</div>
+        <div class="map-caption">FORWARD AREA &mdash; ARRAS SALIENT &middot; NOT TO SCALE</div>
+        <div id="map-pins"></div>
+      </div>
+      <aside id="brief-panel">
+        <div class="paper brief-paper">
+          <div id="brief-status" class="brief-status"></div>
+          <h2 id="brief-name" class="paper-h"></h2>
+          <div class="brief-pips-row">ASSESSED RESISTANCE <span id="brief-pips"></span></div>
+          <p id="brief-text" class="brief-block"></p>
+          <div class="brief-label">THREAT PROFILE</div>
+          <p id="brief-threat" class="brief-block"></p>
+          <div class="brief-label">RECOMMENDED APPROACH</div>
+          <p id="brief-approach" class="brief-block"></p>
+          <button id="btn-muster" class="btn btn-big">MUSTER THE SECTION</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MUSTER: ROSTER + REQUISITIONS ============ -->
+<div id="muster-screen" class="overlay">
+  <div id="muster-inner">
+    <header class="camp-head">
+      <div class="topbar-title" id="muster-title">MUSTER</div>
+      <div class="topbar-stats">
+        <div class="stat"><span class="stat-label">MANPOWER</span><span id="muster-manpower" class="stat-value brass">0</span></div>
+        <div class="stat"><span class="stat-label">REQUISITION</span><span id="muster-rp" class="stat-value brass">0</span></div>
+        <div class="stat"><span class="stat-label">BARRAGES HELD</span><span id="muster-charges" class="stat-value">0</span></div>
+        <div class="stat"><span class="stat-label">OP. SUPPLIES</span><span id="muster-supplies" class="stat-value">0</span></div>
+      </div>
+      <button id="btn-back-map" class="btn btn-small">BACK TO MAP</button>
+    </header>
+    <div class="muster-body">
+      <section class="panel-block muster-col">
+        <h2 class="panel-h">THE SECTION &mdash; CHOOSE WHO GOES UP</h2>
+        <div id="roster-list"></div>
+        <button id="btn-recruit" class="btn btn-build">
+          <span class="build-name">RECRUIT A REPLACEMENT</span>
+          <span class="build-cost">25 MANPOWER</span>
+        </button>
+      </section>
+      <section class="panel-block muster-col">
+        <h2 class="panel-h">REQUISITIONS</h2>
+        <div id="req-list"></div>
+        <div id="deploy-note" class="small-note">Pick loadouts with the dropdowns. Four men deploy free; a fifth and sixth cost manpower.</div>
+        <div id="deploy-summary" class="small-note deploy-summary"></div>
+        <button id="btn-begin-op" class="btn btn-big btn-wave">BEGIN THE OPERATION</button>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ============ BATTLE ============ -->
 <div id="game-root" hidden>
   <header id="topbar">
     <div class="topbar-title">OVER THE BAGS</div>
     <div class="topbar-stats">
+      <div class="stat"><span class="stat-label">SECTOR</span><span id="stat-sector" class="stat-value">&mdash;</span></div>
       <div class="stat"><span class="stat-label">ASSAULT</span><span id="stat-wave" class="stat-value">&mdash;</span></div>
       <div class="stat"><span class="stat-label">SUPPLIES</span><span id="stat-supplies" class="stat-value brass">0</span></div>
       <div class="stat"><span class="stat-label">LINE INTEGRITY</span><span id="stat-breach" class="stat-value">&#9679;&#9679;&#9679;&#9679;</span></div>
@@ -68,24 +153,42 @@
             <span class="build-name">MG NEST</span>
             <span class="build-cost">50 SUPPLIES</span>
           </button>
+          <button id="btn-mortar" class="btn btn-build">
+            <span class="build-name">MORTAR PIT</span>
+            <span class="build-cost">70 SUPPLIES</span>
+          </button>
+          <button id="btn-sniper" class="btn btn-build">
+            <span class="build-name">SNIPER POST</span>
+            <span class="build-cost">45 SUPPLIES</span>
+          </button>
           <button id="btn-cancel" class="btn btn-build btn-cancel" hidden>CANCEL PLACEMENT</button>
         </div>
-        <div id="build-hint" class="small-note">Wire slows the enemy. The gun needs a man beside it.<br>Keys: 1&ndash;4 select &middot; right-click deselect &middot; P pause &middot; M mute</div>
+      </section>
+
+      <section class="panel-block">
+        <h2 class="panel-h">SUPPORT</h2>
+        <div id="support-bar">
+          <button id="btn-arty" class="btn btn-build">
+            <span class="build-name">PLANNED BARRAGE</span>
+            <span class="build-cost" id="arty-cost">NO CHARGES HELD</span>
+          </button>
+          <button id="btn-recon" class="btn btn-build">
+            <span class="build-name">AIR RECON</span>
+            <span class="build-cost" id="recon-cost">25 SUPPLIES</span>
+          </button>
+          <button id="btn-repair" class="btn btn-build">
+            <span class="build-name">TRENCH REPAIR</span>
+            <span class="build-cost" id="repair-cost">30 SUPPLIES &mdash; +1 INTEGRITY</span>
+          </button>
+        </div>
+        <div id="build-hint" class="small-note">Keys: 1&ndash;6 select &middot; right-click deselect &middot; P pause &middot; M mute</div>
       </section>
 
       <section class="panel-block">
         <h2 class="panel-h">ORDERS</h2>
-        <div id="objective" class="small-note">Hold the trench. Survive 5 assaults.</div>
+        <div id="objective" class="small-note">Hold the trench.</div>
         <div id="wave-pips"></div>
         <button id="btn-wave" class="btn btn-big btn-wave">STAND TO &mdash; BEGIN ASSAULT</button>
-      </section>
-
-      <section class="panel-block panel-locked">
-        <h2 class="panel-h">REQUISITIONS &mdash; DENIED</h2>
-        <div class="small-note locked-list">
-          Armoured Company &middot; Recon Wing &middot; Supply Convoy &middot; Reserve Platoon<br>
-          <em>"Divisional assets are committed elsewhere. Make do." &mdash; HQ</em>
-        </div>
       </section>
     </aside>
   </main>
@@ -97,20 +200,33 @@
     <div class="paper-stamp" id="results-stamp">LINE HELD</div>
     <h2 id="results-title" class="paper-h">ASSAULT REPULSED</h2>
     <div id="results-body" class="paper-body"></div>
-    <button id="btn-continue" class="btn btn-big">RETURN TO POSITIONS</button>
+    <button id="btn-continue-wave" class="btn btn-big">RETURN TO POSITIONS</button>
   </div>
 </div>
 
-<!-- ============ END SCREENS ============ -->
+<!-- ============ MISSION REPORT ============ -->
+<div id="mission-screen" class="overlay">
+  <div class="paper">
+    <div class="paper-stamp" id="mission-stamp">SECTOR SECURED</div>
+    <h2 id="mission-title" class="paper-h">OPERATION COMPLETE</h2>
+    <div id="mission-body" class="paper-body"></div>
+    <button id="btn-mission-continue" class="btn btn-big">RETURN TO THE MAP</button>
+  </div>
+</div>
+
+<!-- ============ CAMPAIGN END ============ -->
 <div id="end-screen" class="overlay">
   <div class="menu-inner">
     <div class="menu-kicker" id="end-kicker"></div>
     <h1 class="menu-title end-title" id="end-title"></h1>
     <div class="menu-brief" id="end-body"></div>
-    <button id="btn-restart" class="btn btn-big">RETURN TO COMMAND</button>
+    <button id="btn-end-continue" class="btn btn-big">RETURN TO COMMAND</button>
   </div>
 </div>
 
+<script src="config.js"></script>
+<script src="audio.js"></script>
+<script src="campaign.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

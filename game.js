@@ -1,231 +1,80 @@
 /* =========================================================================
-   OVER THE BAGS — trench command MVP
-   Vanilla JS + Canvas. No build step.
+   OVER THE BAGS — battle engine.
+   Campaign flow lives in campaign.js; data/tuning in config.js.
    ========================================================================= */
 'use strict';
 
 /* =========================================================================
-   CONFIG — edit audio paths / balance here
-   ========================================================================= */
-const AUDIO_TRACKS = {
-  menu:   'audio/Over The Bags Main Theme.mp3', // start menu + defeat
-  prep:   'audio/Homeland.mp3',                 // prep phase, waves 1-4
-  anthem: 'audio/Anthem.mp3',                   // prep before final wave + victory
-  battle: 'audio/Never Before.mp3',             // active battle, waves 1-4
-  armor:  'audio/March of the Tanks.mp3',       // final wave (tank assault)
-};
-const MUSIC_VOLUME = 0.55;
-const SFX_VOLUME = 0.5;
-
-const BALANCE = {
-  startSupplies: 75,
-  wireCost: 20,
-  mgCost: 50,
-  maxBreaches: 6,
-  waveReward: [30, 35, 40, 45, 0], // base supplies per wave (+ kill bounties)
-};
-
-/* Field geometry (canvas is 900x700) */
-const W = 900, H = 700;
-const ENEMY_LINE = 70;      // bottom of enemy trench
-const TRENCH_TOP = 530;     // front lip of player trench
-const TRENCH_BOT = 648;     // rear of player trench (soldier move band)
-const BREACH_Y = 676;       // enemy past this = breach
-const WIRE_ZONE = { top: 270, bot: 505 };
-
-const SOLDIER = { hp: 100, speed: 85, range: 210, fireRate: 0.85, dmg: 9 };
-const MG = { range: 300, fireRate: 0.12, dmg: 6, manRadius: 60 };
-
-const ENEMY_TYPES = {
-  infantry: { hp: 55,  speed: 33, dmg: 7,  hitRate: 0.8, reward: 2,  r: 9,  wireSlow: 0.35 },
-  raider:   { hp: 30,  speed: 62, dmg: 9,  hitRate: 0.6, reward: 3,  r: 8,  wireSlow: 0.35 },
-  heavy:    { hp: 200, speed: 22, dmg: 14, hitRate: 1.1, reward: 6,  r: 12, wireSlow: 0.55 },
-  tank:     { hp: 500, speed: 12, dmg: 0,  hitRate: 0,   reward: 20, r: 20, wireSlow: 0.85 },
-};
-
-/* Wave scripts: squads go over the top together in lines (burst = squad size) */
-const WAVES = [
-  { groups: [{ type: 'infantry', n: 6,  start: 1, gap: 9, burst: 3 }] },
-  { groups: [{ type: 'infantry', n: 10, start: 1, gap: 10, burst: 5 },
-             { type: 'raider',   n: 4,  start: 5, gap: 7,  burst: 2 }] },
-  { groups: [{ type: 'infantry', n: 12, start: 1, gap: 9,  burst: 6 },
-             { type: 'raider',   n: 6,  start: 4, gap: 7,  burst: 3 },
-             { type: 'heavy',    n: 3,  start: 14, gap: 0, burst: 3 }] },
-  { groups: [{ type: 'infantry', n: 16, start: 1, gap: 8,  burst: 8 },
-             { type: 'raider',   n: 8,  start: 3, gap: 6,  burst: 4 },
-             { type: 'heavy',    n: 4,  start: 10, gap: 8, burst: 2 }] },
-  { groups: [{ type: 'infantry', n: 12, start: 1, gap: 8,  burst: 6 },
-             { type: 'raider',   n: 8,  start: 2, gap: 6,  burst: 4 },
-             { type: 'heavy',    n: 5,  start: 6, gap: 8,  burst: 3 },
-             { type: 'tank',     n: 1,  start: 12, gap: 0, burst: 1 }] },
-];
-
-const CALLSIGNS = ['Sgt. Brandt', 'Cpl. Hayes', 'Pvt. Miller', 'Pvt. Okafor'];
-
-const PRE_WAVE_MSG = [
-  'Listening post reports movement across the wire. First assault expected within the hour. Dig in.',
-  'They tested us. Expect them faster this time — raiders move ahead of the line.',
-  'Intel warns of heavy stormtroopers in the next push. Rifles alone may not stop them.',
-  'No reinforcements. HQ says hold at any cost. The next assault will be the worst yet.',
-  'URGENT — enemy ARMOUR reported near the forward line. Hold this one, and we go over the bags.',
-];
-const POST_WAVE_MSG = [
-  'Good work. Supplies have been authorized. They will be back.',
-  'Line held. HQ sends its compliments — and nothing else.',
-  'You need to charge soon. But not yet. Hold.',
-  'One more push and they break. Make ready.',
-];
-
-/* =========================================================================
-   MUSIC MANAGER
-   ========================================================================= */
-const Music = {
-  el: new Audio(),
-  current: null,
-  muted: false,
-  fadeTimer: null,
-  init() {
-    this.el.loop = true;
-    this.el.volume = MUSIC_VOLUME;
-    this.el.addEventListener('error', () => {
-      console.warn('[music] failed to load:', this.el.src, '— continuing without it');
-    });
-  },
-  play(name) {
-    if (name === this.current) return;
-    this.current = name;
-    const src = AUDIO_TRACKS[name];
-    if (!src) return;
-    clearInterval(this.fadeTimer);
-    // fade out, swap, fade in
-    const el = this.el, target = this.muted ? 0 : MUSIC_VOLUME;
-    const swap = () => {
-      el.src = src;
-      el.volume = 0;
-      el.play().catch(() => {}); // autoplay guard; user gesture arrives eventually
-      this.fadeTimer = setInterval(() => {
-        el.volume = Math.min(target, el.volume + 0.05);
-        if (el.volume >= target) clearInterval(this.fadeTimer);
-      }, 60);
-    };
-    if (el.src && !el.paused) {
-      this.fadeTimer = setInterval(() => {
-        el.volume = Math.max(0, el.volume - 0.08);
-        if (el.volume <= 0) { clearInterval(this.fadeTimer); swap(); }
-      }, 50);
-    } else swap();
-  },
-  setMuted(m) {
-    this.muted = m;
-    clearInterval(this.fadeTimer);
-    this.el.volume = m ? 0 : MUSIC_VOLUME;
-  },
-};
-
-/* =========================================================================
-   SFX — small WebAudio synth (no sample files needed)
-   ========================================================================= */
-const Sfx = {
-  ctx: null, gain: null, muted: false,
-  ensure() {
-    if (!this.ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return false;
-      this.ctx = new AC();
-      this.gain = this.ctx.createGain();
-      this.gain.gain.value = SFX_VOLUME;
-      this.gain.connect(this.ctx.destination);
-    }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
-    return true;
-  },
-  noise(dur, freq, q, vol, type = 'bandpass') {
-    if (this.muted || !this.ensure()) return;
-    const c = this.ctx, t = c.currentTime;
-    const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
-    const src = c.createBufferSource(); src.buffer = buf;
-    const f = c.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
-    const g = c.createGain();
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(f); f.connect(g); g.connect(this.gain);
-    src.start();
-  },
-  tone(f0, f1, dur, vol, type = 'sine') {
-    if (this.muted || !this.ensure()) return;
-    const c = this.ctx, t = c.currentTime;
-    const o = c.createOscillator(); o.type = type;
-    o.frequency.setValueAtTime(f0, t);
-    o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
-    const g = c.createGain();
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.gain);
-    o.start(); o.stop(t + dur);
-  },
-  rifle()  { this.noise(0.09, 1600, 1.2, 0.5); this.tone(220, 60, 0.06, 0.12, 'square'); },
-  mg()     { this.noise(0.05, 1900, 1.5, 0.32); },
-  boom(big = 1) {
-    this.noise(0.7 * big, 320, 0.7, 0.7 * big, 'lowpass');
-    this.tone(110, 28, 0.5 * big, 0.4 * big);
-  },
-  thud()   { this.noise(0.07, 300, 1, 0.3, 'lowpass'); },
-  click()  { this.noise(0.03, 2500, 2, 0.15); },
-  whistle(){ this.tone(1800, 2400, 1.4, 0.25, 'sine'); },
-  build()  { this.noise(0.15, 700, 1, 0.3, 'lowpass'); },
-  setMuted(m) { this.muted = m; },
-};
-
-/* =========================================================================
-   STATE
+   BATTLE STATE
    ========================================================================= */
 const G = {
-  state: 'MENU', // MENU | PREP | WAVE | RESULTS | CHARGE | END
+  state: 'IDLE', // IDLE | PREP | WAVE | RESULTS | CHARGE | DONE
   paused: false,
-  wave: 0,       // index of current/next wave (0-based)
-  supplies: BALANCE.startSupplies,
+  sectorIdx: 0,
+  sector: null,
+  diffc: null,          // difficulty preset
+  wave: 0,              // index into sector.waves
+  supplies: 0,
   breaches: 0,
+  breachLimit: 6,
   soldiers: [],
   enemies: [],
   wires: [],
   mgNest: null,
-  spawnQueue: [],   // [{t, type}] sorted
+  mgAmmo: false,        // requisitioned belt surplus (+dmg this mission)
+  mortar: null,
+  sniperPost: null,
+  spawnPlan: [],        // pre-generated at prep so recon can read it
+  spawnQueue: [],
   waveT: 0,
+  prepT: 0,
+  reconUsed: false,
+  shelling: null,       // enemy prep bombardment {phase, t, targets}
+  arty: { cd: 0 },      // player barrage cooldown (charges live in Camp.state)
+  incoming: [],         // friendly shells falling {x,y,t}
+  grenades: [],
   tracers: [],
-  shells: [],
+  shells: [],           // tank shells
   particles: [],
   ambientSmoke: [],
   selected: null,
-  placing: null,    // 'wire' | 'mg' | null
+  placing: null,        // 'wire' | 'mg' | 'mortar' | 'sniper' | 'arty'
   mouse: { x: 0, y: 0, inField: false },
   shake: 0,
-  killsWave: 0, earnWave: 0, killsTotal: 0,
+  killsWave: 0, earnWave: 0,
   chargeT: 0,
   ambientT: 3,
   muted: false,
-  invalidFlash: null, // {x,y,t}
-  moveMark: null,     // {x,y,t}
-  dangerFlash: 0,     // red vignette pulse when the line is hurt
+  invalidFlash: null,
+  moveMark: null,
+  dangerFlash: 0,
 };
 
 /* =========================================================================
    DOM
    ========================================================================= */
-const $ = id => document.getElementById(id);
-const canvas = $('field'), ctx = canvas.getContext('2d');
+const $id = id => document.getElementById(id);
+const canvas = $id('field'), ctx = canvas.getContext('2d');
 const ui = {
-  menu: $('menu-screen'), root: $('game-root'),
-  wave: $('stat-wave'), supplies: $('stat-supplies'), breach: $('stat-breach'),
-  log: $('cmd-log'), roster: $('roster'), pips: $('wave-pips'),
-  btnWire: $('btn-wire'), btnMg: $('btn-mg'), btnCancel: $('btn-cancel'),
-  btnWave: $('btn-wave'), btnPause: $('btn-pause'), btnMute: $('btn-mute'),
-  results: $('results-screen'), resultsTitle: $('results-title'),
-  resultsBody: $('results-body'), resultsStamp: $('results-stamp'),
-  btnContinue: $('btn-continue'),
-  end: $('end-screen'), endKicker: $('end-kicker'), endTitle: $('end-title'), endBody: $('end-body'),
-  pauseVeil: $('pause-veil'),
+  wave: $id('stat-wave'), supplies: $id('stat-supplies'), breach: $id('stat-breach'),
+  sectorName: $id('stat-sector'),
+  log: $id('cmd-log'), roster: $id('roster'), pips: $id('wave-pips'),
+  btnWire: $id('btn-wire'), btnMg: $id('btn-mg'), btnMortar: $id('btn-mortar'),
+  btnSniper: $id('btn-sniper'), btnCancel: $id('btn-cancel'),
+  btnArty: $id('btn-arty'), artyCost: $id('arty-cost'),
+  btnRecon: $id('btn-recon'), reconCost: $id('recon-cost'),
+  btnRepair: $id('btn-repair'),
+  btnWave: $id('btn-wave'), btnPause: $id('btn-pause'), btnMute: $id('btn-mute'),
+  objective: $id('objective'),
+  results: $id('results-screen'), resultsTitle: $id('results-title'),
+  resultsBody: $id('results-body'), resultsStamp: $id('results-stamp'),
+  btnContinueWave: $id('btn-continue-wave'),
+  mission: $id('mission-screen'), missionStamp: $id('mission-stamp'),
+  missionTitle: $id('mission-title'), missionBody: $id('mission-body'),
+  btnMissionContinue: $id('btn-mission-continue'),
+  end: $id('end-screen'), endKicker: $id('end-kicker'), endTitle: $id('end-title'), endBody: $id('end-body'),
+  btnEndContinue: $id('btn-end-continue'),
+  pauseVeil: $id('pause-veil'),
 };
 
 function addLog(text, warn = false, tag = 'HQ') {
@@ -242,9 +91,9 @@ function buildRoster() {
   G.soldiers.forEach((s, i) => {
     const el = document.createElement('div');
     el.className = 'trooper';
-    el.innerHTML = `<div class="trooper-dot"></div>
+    el.innerHTML = `<div class="trooper-dot" style="background:${LOADOUTS[s.loadout].color}"></div>
       <div class="trooper-info">
-        <div class="trooper-name">${s.name}</div>
+        <div class="trooper-name">${i + 1}. ${s.name} <span class="trooper-role">${LOADOUTS[s.loadout].tag}</span></div>
         <div class="hp-bar"><div class="hp-fill"></div></div>
         <div class="trooper-status">READY</div>
       </div>`;
@@ -260,9 +109,9 @@ function buildRoster() {
 
 function updateRoster() {
   for (const s of G.soldiers) {
-    const pct = Math.max(0, s.hp) / SOLDIER.hp * 100;
+    const pct = Math.max(0, s.hp) / s.maxHp * 100;
     s.card.hp.style.width = pct + '%';
-    s.card.hp.classList.toggle('low', s.hp < 35);
+    s.card.hp.classList.toggle('low', s.hp < s.maxHp * 0.35);
     s.card.root.classList.toggle('selected', G.selected === s);
     s.card.root.classList.toggle('dead', s.dead);
     let st = 'READY';
@@ -270,51 +119,125 @@ function updateRoster() {
     else if (s.moveTarget) st = 'MOVING';
     else if (s.manningMg) st = 'ON THE GUN';
     else if (s.firing > 0) st = 'FIRING';
-    else if (s.hp < 35) st = 'WOUNDED';
+    else if (s.hp < s.maxHp * 0.35) st = 'WOUNDED';
     s.card.status.textContent = st;
   }
 }
 
 function updateHUD() {
-  ui.wave.textContent = G.state === 'MENU' ? '—' : `${Math.min(G.wave + 1, 5)} / 5`;
+  const st = Camp.state;
+  ui.sectorName.textContent = G.sector ? G.sector.name.split('—')[0].trim() : '—';
+  ui.wave.textContent = G.sector ? `${Math.min(G.wave + 1, G.sector.waves.length)} / ${G.sector.waves.length}` : '—';
   ui.supplies.textContent = G.supplies;
-  const left = BALANCE.maxBreaches - G.breaches;
+  const left = Math.max(0, G.breachLimit - G.breaches);
   ui.breach.textContent = '●'.repeat(left) + '○'.repeat(G.breaches);
   ui.breach.classList.toggle('danger', left <= 2);
-  ui.btnWire.disabled = G.supplies < BALANCE.wireCost;
-  ui.btnMg.disabled = !!G.mgNest || G.supplies < BALANCE.mgCost;
+
+  const inPlay = G.state === 'PREP' || G.state === 'WAVE';
+  ui.btnWire.disabled = !inPlay || G.supplies < BALANCE.wireCost;
+  ui.btnMg.disabled = !inPlay || !!G.mgNest || G.supplies < BALANCE.mgCost;
   ui.btnMg.querySelector('.build-cost').textContent = G.mgNest ? 'EMPLACED' : `${BALANCE.mgCost} SUPPLIES`;
+  ui.btnMortar.disabled = !inPlay || !!G.mortar || G.supplies < BALANCE.mortarCost;
+  ui.btnMortar.querySelector('.build-cost').textContent = G.mortar ? 'EMPLACED' : `${BALANCE.mortarCost} SUPPLIES`;
+  ui.btnSniper.disabled = !inPlay || !!G.sniperPost || G.supplies < BALANCE.sniperCost;
+  ui.btnSniper.querySelector('.build-cost').textContent = G.sniperPost ? 'EMPLACED' : `${BALANCE.sniperCost} SUPPLIES`;
+
+  // support
+  const charges = st ? st.artCharges : 0;
+  ui.btnArty.disabled = G.state !== 'WAVE' || charges <= 0 || G.arty.cd > 0;
+  ui.artyCost.textContent = charges <= 0 ? 'NO CHARGES HELD'
+    : G.arty.cd > 0 ? `RELAYING ORDERS… (${Math.ceil(G.arty.cd)}s)`
+    : `${charges} CHARGE${charges > 1 ? 'S' : ''} HELD — CLICK, THEN TARGET`;
+  const rCost = reconPrice();
+  ui.btnRecon.disabled = G.state !== 'PREP' || G.reconUsed || G.supplies < rCost;
+  ui.reconCost.textContent = G.reconUsed ? 'SORTIE FLOWN' : `${rCost} SUPPLIES — REVEAL THE NEXT ASSAULT`;
+  ui.btnRepair.disabled = G.state !== 'PREP' || G.breaches <= 0 || G.supplies < BALANCE.repairCost;
+
   // wave pips
   ui.pips.innerHTML = '';
-  for (let i = 0; i < 5; i++) {
+  const n = G.sector ? G.sector.waves.length : 5;
+  for (let i = 0; i < n; i++) {
     const p = document.createElement('div');
     p.className = 'pip' + (i < G.wave ? ' done' : (i === G.wave && G.state === 'WAVE' ? ' now' : ''));
     ui.pips.appendChild(p);
   }
 }
 
-/* =========================================================================
-   ENTITIES
-   ========================================================================= */
-function makeSoldiers() {
-  G.soldiers = CALLSIGNS.map((name, i) => ({
-    name, x: 210 + i * 160, y: 585,
-    hp: SOLDIER.hp, dead: false,
-    moveTarget: null, cooldown: Math.random() * 0.5,
-    firing: 0, manningMg: false, facing: -Math.PI / 2,
-  }));
+function reconPrice() {
+  const scoutUp = G.soldiers.some(s => !s.dead && s.loadout === 'scout');
+  return scoutUp ? BALANCE.reconCostScout : BALANCE.reconCost;
 }
 
+/* =========================================================================
+   MISSION SETUP (called from campaign.js)
+   ========================================================================= */
+window.startMission = function (sectorIdx, deployedRoster, opts) {
+  G.sectorIdx = sectorIdx;
+  G.sector = SECTORS[sectorIdx];
+  G.diffc = Camp.diff();
+  G.wave = 0;
+  G.supplies = Math.round(G.sector.startSupplies * G.diffc.supplies) + (opts.bonusSupplies || 0);
+  G.breaches = 0;
+  G.breachLimit = Math.max(2, BALANCE.maxBreaches + G.diffc.breachMod);
+  G.enemies = []; G.wires = []; G.mgNest = null; G.mortar = null; G.sniperPost = null;
+  G.mgAmmo = !!opts.mgAmmo;
+  G.incoming = []; G.grenades = []; G.tracers = []; G.shells = []; G.particles = [];
+  G.selected = null; G.placing = null; G.arty.cd = 0;
+  G.killsWave = 0; G.earnWave = 0; G.shake = 0; G.dangerFlash = 0; G.paused = false;
+  ui.pauseVeil.hidden = true;
+  ui.btnPause.textContent = 'PAUSE';
+
+  G.soldiers = deployedRoster.map((r, i) => makeBattleSoldier(r, i, deployedRoster.length));
+  Camp.showScreen('battle');
+  buildRoster();
+  renderGround();
+  G.ambientSmoke = Array.from({ length: 6 }, () => ({
+    x: Math.random() * W, y: 130 + Math.random() * 340,
+    vx: 4 + Math.random() * 8, size: 60 + Math.random() * 80, a: 0.04 + Math.random() * 0.04,
+  }));
+  ui.log.innerHTML = '';
+  ui.objective.textContent = `Hold the line. Survive ${G.sector.waves.length} assaults.`;
+  addLog(`${G.sector.name}. ${G.soldiers.length} men on the fire step. Hold it.`);
+  if (G.mgAmmo) addLog('Surplus MG belts came up with the ration party. The gun will hit harder.', false, 'ADJUTANT');
+  enterPrep();
+};
+
+function makeBattleSoldier(r, i, count) {
+  const lo = LOADOUTS[r.loadout] || LOADOUTS.rifleman;
+  const lvl = Camp.levelOf(r);
+  const stats = Object.assign({}, SOLDIER, lo.stats);
+  const maxHp = SOLDIER.hp + lvl * LEVEL_HP;
+  const spread = Math.min(560, 120 * count);
+  return {
+    rosterId: r.id, name: r.name, loadout: r.loadout, level: lvl,
+    x: W / 2 - spread / 2 + (count > 1 ? i * (spread / (count - 1)) : 0), y: 585,
+    maxHp, hp: Math.max(10, Math.round(r.hp / 100 * maxHp)),
+    range: stats.range, speed: stats.speed,
+    fireRate: stats.fireRate * (1 - LEVEL_FIRERATE * lvl),
+    dmg: stats.dmg + LEVEL_DMG * lvl,
+    dead: false, moveTarget: null, cooldown: Math.random() * 0.5,
+    firing: 0, manningMg: false, facing: -Math.PI / 2,
+    kills: 0, meleeCd: 0, grenCd: 3 + Math.random() * 3,
+  };
+}
+
+/* =========================================================================
+   ENTITY HELPERS
+   ========================================================================= */
 function spawnEnemy(type, x) {
   const t = ENEMY_TYPES[type];
   G.enemies.push({
-    type, ...t, maxHp: t.hp,
+    type, ...t, maxHp: 0,
+    hp: Math.round(t.hp * G.diffc.enemyHp),
+    speed: t.speed * G.diffc.enemySpd,
     x: x !== undefined ? x : 70 + Math.random() * (W - 140),
     y: ENEMY_LINE - 20 - Math.random() * 30,
     wobble: Math.random() * Math.PI * 2,
     meleeT: 0, victim: null, reload: 2 + Math.random() * 2,
     dead: false, breached: false,
   });
+  const e = G.enemies[G.enemies.length - 1];
+  e.maxHp = e.hp;
   if (type === 'tank') {
     addLog('ARMOUR SIGHTED. All guns on the tank!', true, 'LOOKOUT');
     Sfx.boom(0.6);
@@ -342,14 +265,16 @@ function nearestEnemy(from, maxD) {
   return best;
 }
 
-function damageEnemy(e, dmg) {
+function damageEnemy(e, dmg, killer) {
+  if (e.dead) return;
   e.hp -= dmg;
   // dt-scaled chip damage (wire) only puffs occasionally, or it floods particles
   if (dmg >= 1 || Math.random() < 0.04) puff(e.x, e.y, e.type === 'tank' ? '#888578' : '#5e2f26', 3);
   if (e.hp <= 0 && !e.dead) {
     e.dead = true;
-    G.killsWave++; G.killsTotal++;
+    G.killsWave++;
     G.earnWave += e.reward;
+    if (killer) killer.kills++;
     stain(e.x, e.y, e.type === 'tank' ? 16 : 7);
     if (e.type === 'tank') {
       explode(e.x, e.y, 40, 0);
@@ -358,8 +283,9 @@ function damageEnemy(e, dmg) {
   }
 }
 
-function damageSoldier(s, dmg) {
+function damageSoldier(s, dmg, attacker) {
   if (s.dead) return;
+  if (attacker && s.loadout === 'bayonet') dmg *= LOADOUTS.bayonet.meleeResist;
   s.hp -= dmg;
   puff(s.x, s.y, '#6e2b22', 4);
   Sfx.thud();
@@ -369,8 +295,8 @@ function damageSoldier(s, dmg) {
     if (G.selected === s) G.selected = null;
     stain(s.x, s.y, 8);
     addLog(`${s.name} is down.`, true, 'SECTION');
-    if (G.soldiers.every(x => x.dead)) defeat('men');
-  } else if (s.hp < 35 && s.hp + dmg >= 35) {
+    if (G.soldiers.every(x => x.dead)) missionEnd(false, 'men');
+  } else if (s.hp < s.maxHp * 0.35 && s.hp + dmg >= s.maxHp * 0.35) {
     addLog(`${s.name} is wounded and slowing.`, true, 'SECTION');
   }
 }
@@ -383,7 +309,7 @@ function breach(e) {
   Sfx.boom(0.5);
   addLog('They are through the line! Integrity failing.', true, 'LOOKOUT');
   updateHUD();
-  if (G.breaches >= BALANCE.maxBreaches) defeat('line');
+  if (G.breaches >= G.breachLimit) missionEnd(false, 'line');
 }
 
 /* =========================================================================
@@ -422,6 +348,22 @@ function explode(x, y, radius, dmgToSoldiers) {
     }
   }
 }
+function explodeVsEnemies(x, y, radius, dmg, damageWire) {
+  Sfx.boom(0.9);
+  G.shake = Math.max(G.shake, 0.4);
+  smoke(x, y, 8, 1.4);
+  puff(x, y, '#c8b46a', 7);
+  crater(x, y, radius * 0.45);
+  for (const e of G.enemies) {
+    if (!e.dead && Math.hypot(e.x - x, e.y - y) < radius + e.r) damageEnemy(e, dmg);
+  }
+  if (damageWire) {
+    for (const w of G.wires) {
+      if (Math.hypot(w.x - x, w.y - y) < radius + w.w / 2) w.hp -= dmg * 0.5;
+    }
+    G.wires = G.wires.filter(w => w.hp > 0);
+  }
+}
 
 /* Persistent ground scars drawn onto an offscreen layer */
 let scarCanvas, scarCtx;
@@ -442,7 +384,7 @@ function stain(x, y, r) {
 }
 
 /* =========================================================================
-   GROUND (pre-rendered once)
+   GROUND (pre-rendered once per mission)
    ========================================================================= */
 let groundCanvas;
 function renderGround() {
@@ -450,7 +392,6 @@ function renderGround() {
   groundCanvas.width = W; groundCanvas.height = H;
   const c = groundCanvas.getContext('2d');
 
-  // mud base
   const grad = c.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0, '#2b271a');
   grad.addColorStop(0.5, '#3a3423');
@@ -458,14 +399,12 @@ function renderGround() {
   c.fillStyle = grad;
   c.fillRect(0, 0, W, H);
 
-  // mottling
   for (let i = 0; i < 320; i++) {
     c.fillStyle = Math.random() < 0.5 ? 'rgba(20,17,10,.10)' : 'rgba(90,80,52,.07)';
     c.beginPath();
     c.ellipse(Math.random() * W, Math.random() * H, 6 + Math.random() * 26, 4 + Math.random() * 14, Math.random() * 3, 0, 7);
     c.fill();
   }
-  // old craters in no man's land
   for (let i = 0; i < 14; i++) {
     const x = 40 + Math.random() * (W - 80), y = 130 + Math.random() * 340, r = 12 + Math.random() * 22;
     const g = c.createRadialGradient(x, y, 1, x, y, r);
@@ -478,11 +417,10 @@ function renderGround() {
     c.beginPath(); c.arc(x, y, r * 0.7, Math.random() * 3, Math.random() * 3 + 2.5); c.stroke();
   }
 
-  // ---- enemy trench (top) ----
+  // enemy trench
   c.fillStyle = '#1d1910';
   c.fillRect(0, 0, W, ENEMY_LINE);
   sandbagRow(c, ENEMY_LINE - 4, '#4a4231', '#3c3627');
-  // enemy wire line
   c.strokeStyle = '#494438';
   c.lineWidth = 1.5;
   for (const yy of [96, 104]) {
@@ -490,16 +428,15 @@ function renderGround() {
     for (let x = 0; x <= W; x += 12) c.lineTo(x, yy + (x % 24 === 0 ? -4 : 4));
     c.stroke();
   }
-  for (let x = 20; x < W; x += 60) { // posts
+  for (let x = 20; x < W; x += 60) {
     c.strokeStyle = '#3a352a';
     c.lineWidth = 3;
     c.beginPath(); c.moveTo(x, 90); c.lineTo(x, 110); c.stroke();
   }
 
-  // ---- player trench (bottom) ----
+  // player trench
   c.fillStyle = '#221d12';
   c.fillRect(0, TRENCH_TOP, W, H - TRENCH_TOP);
-  // duckboards
   c.strokeStyle = 'rgba(94,78,48,.5)';
   c.lineWidth = 2;
   for (let x = 8; x < W; x += 26) {
@@ -509,13 +446,10 @@ function renderGround() {
   for (const yy of [TRENCH_TOP + 20, TRENCH_BOT + 16]) {
     c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke();
   }
-  // parapet sandbags — "the bags"
   sandbagRow(c, TRENCH_TOP - 10, '#6b5d40', '#574c34');
   sandbagRow(c, TRENCH_TOP + 1, '#5d5138', '#4a4230');
-  // rear lip
   sandbagRow(c, TRENCH_BOT + 20, '#4a4231', '#3c3627');
 
-  // shell streaks
   for (let i = 0; i < 8; i++) {
     const x = Math.random() * W, y = 150 + Math.random() * 300;
     c.strokeStyle = 'rgba(22,18,11,.4)';
@@ -523,7 +457,6 @@ function renderGround() {
     c.beginPath(); c.moveTo(x, y); c.lineTo(x + (Math.random() - 0.5) * 60, y + 20 + Math.random() * 30); c.stroke();
   }
 
-  // scar layer (persistent battle damage)
   scarCanvas = document.createElement('canvas');
   scarCanvas.width = W; scarCanvas.height = H;
   scarCtx = scarCanvas.getContext('2d');
@@ -550,30 +483,50 @@ function roundRect(c, x, y, w, h, r) {
 }
 
 /* =========================================================================
-   GAME FLOW
+   WAVE FLOW
    ========================================================================= */
-function startGame() {
-  ui.menu.classList.remove('visible');
-  ui.root.hidden = false;
-  makeSoldiers();
-  buildRoster();
-  renderGround();
-  // ambient drifting smoke
-  G.ambientSmoke = Array.from({ length: 6 }, () => ({
-    x: Math.random() * W, y: 130 + Math.random() * 340,
-    vx: 4 + Math.random() * 8, size: 60 + Math.random() * 80, a: 0.04 + Math.random() * 0.04,
-  }));
-  addLog('Section, this is your trench now. Four men. Hold it.');
-  addLog('Click a soldier, then click ground in the trench to move him. String wire out front. Begin the assault when ready.', false, 'ADJUTANT');
-  enterPrep();
+function buildSpawnPlan(waveDef) {
+  const plan = [];
+  for (const g of waveDef.groups) {
+    const bursts = Math.ceil(g.n / g.burst);
+    for (let b = 0; b < bursts; b++) {
+      const inBurst = Math.min(g.burst, g.n - b * g.burst);
+      let center;
+      if (g.lane === 'edges') center = (b % 2 === 0) ? 110 + Math.random() * 130 : W - 110 - Math.random() * 130;
+      else if (g.lane === 'left') center = 110 + Math.random() * 200;
+      else if (g.lane === 'right') center = W - 110 - Math.random() * 200;
+      else center = 130 + Math.random() * (W - 260);
+      for (let i = 0; i < inBurst; i++) {
+        const x = Math.max(50, Math.min(W - 50,
+          center + (i - (inBurst - 1) / 2) * 44 + (Math.random() - 0.5) * 20));
+        plan.push({ t: g.start + b * g.gap + Math.random() * 0.6, type: g.type, x });
+      }
+    }
+  }
+  plan.sort((a, b) => a.t - b.t);
+  return plan;
 }
+function planHasTank(plan) { return plan.some(p => p.type === 'tank'); }
 
 function enterPrep() {
   G.state = 'PREP';
-  Music.play(G.wave === 4 ? 'anthem' : 'prep');
-  addLog(PRE_WAVE_MSG[G.wave], G.wave >= 2);
+  G.prepT = 0;
+  G.reconUsed = false;
+  const waveDef = G.sector.waves[G.wave];
+  G.spawnPlan = buildSpawnPlan(waveDef);
+  Music.play(planHasTank(G.spawnPlan) ? 'anthem' : 'prep');
+  addLog(G.sector.preMsg[G.wave] || 'Stand ready.', G.wave >= 2);
+
+  // enemy bombardment of the trench before this assault?
+  G.shelling = null;
+  if (waveDef.prepShell) {
+    G.shelling = { phase: 'wait', t: PREP_SHELL.warnDelay, shells: waveDef.prepShell.shells, targets: [] };
+    addLog('Enemy field guns registering on our trench — be ready to MOVE.', true, 'LOOKOUT');
+  }
+
+  const last = G.wave === G.sector.waves.length - 1;
   ui.btnWave.disabled = false;
-  ui.btnWave.textContent = G.wave === 4 ? 'STAND TO — FINAL ASSAULT' : 'STAND TO — BEGIN ASSAULT';
+  ui.btnWave.textContent = last ? 'STAND TO — FINAL ASSAULT' : 'STAND TO — BEGIN ASSAULT';
   ui.btnWave.classList.add('hot');
   updateHUD();
 }
@@ -582,23 +535,9 @@ function startWave() {
   if (G.state !== 'PREP') return;
   G.state = 'WAVE';
   G.waveT = 0; G.killsWave = 0; G.earnWave = 0;
-  cancelPlacement();
-  // build spawn queue: each burst is a squad advancing in a rough line
-  G.spawnQueue = [];
-  for (const g of WAVES[G.wave].groups) {
-    const bursts = Math.ceil(g.n / g.burst);
-    for (let b = 0; b < bursts; b++) {
-      const inBurst = Math.min(g.burst, g.n - b * g.burst);
-      const center = 130 + Math.random() * (W - 260);
-      for (let i = 0; i < inBurst; i++) {
-        const x = Math.max(50, Math.min(W - 50,
-          center + (i - (inBurst - 1) / 2) * 44 + (Math.random() - 0.5) * 20));
-        G.spawnQueue.push({ t: g.start + b * g.gap + Math.random() * 0.6, type: g.type, x });
-      }
-    }
-  }
-  G.spawnQueue.sort((a, b) => a.t - b.t);
-  Music.play(G.wave === 4 ? 'armor' : 'battle');
+  if (G.placing !== 'arty') cancelPlacement();
+  G.spawnQueue = G.spawnPlan.slice();
+  Music.play(planHasTank(G.spawnPlan) ? 'armor' : 'battle');
   Sfx.whistle();
   addLog(`Assault ${G.wave + 1} beginning. Stand to!`, true, 'LOOKOUT');
   ui.btnWave.disabled = true;
@@ -608,34 +547,85 @@ function startWave() {
 }
 
 function endWave() {
-  G.shells.length = 0; // don't let a frozen shell detonate next wave
-  const reward = BALANCE.waveReward[G.wave] + G.earnWave;
+  G.shells.length = 0; // don't let a frozen tank shell detonate next wave
+  const reward = Math.round((25 + G.wave * 5) * G.diffc.supplies) + G.earnWave;
   G.supplies += reward;
   const standing = G.soldiers.filter(s => !s.dead).length;
+  const last = G.wave === G.sector.waves.length - 1;
+
+  if (last) { missionEnd(true); return; }
+
   G.state = 'RESULTS';
   updateHUD();
-
-  const last = G.wave === 4;
-  ui.resultsStamp.textContent = last ? 'FINAL DISPATCH' : 'LINE HELD';
-  ui.resultsTitle.textContent = last ? 'ALL ASSAULTS REPULSED' : `ASSAULT ${G.wave + 1} REPULSED`;
+  ui.resultsStamp.textContent = 'LINE HELD';
+  ui.resultsTitle.textContent = `ASSAULT ${G.wave + 1} REPULSED`;
   ui.resultsBody.innerHTML = `
     <div class="tally"><span>Enemy destroyed</span><b>${G.killsWave}</b></div>
     <div class="tally"><span>Supplies authorized</span><b>+${reward}</b></div>
-    <div class="tally"><span>Men standing</span><b>${standing} / 4</b></div>
-    <div class="tally"><span>Line integrity</span><b>${BALANCE.maxBreaches - G.breaches} / ${BALANCE.maxBreaches}</b></div>
-    <p style="margin-top:12px">${last
-      ? 'The enemy line is broken. The whistle is in your hand, commander. Take the men over the bags.'
-      : POST_WAVE_MSG[G.wave]}</p>`;
-  ui.btnContinue.textContent = last ? 'OVER THE BAGS' : 'RETURN TO POSITIONS';
+    <div class="tally"><span>Men standing</span><b>${standing} / ${G.soldiers.length}</b></div>
+    <div class="tally"><span>Line integrity</span><b>${Math.max(0, G.breachLimit - G.breaches)} / ${G.breachLimit}</b></div>
+    <p style="margin-top:12px">${G.sector.postMsg[G.wave] || 'Hold fast.'}</p>`;
   ui.results.classList.add('visible');
-  if (!last) addLog(POST_WAVE_MSG[G.wave]);
+  addLog(G.sector.postMsg[G.wave] || 'Hold fast.');
 }
 
-function continueFromResults() {
-  ui.results.classList.remove('visible');
-  if (G.wave === 4) { startCharge(); return; }
-  G.wave++;
-  enterPrep();
+/* =========================================================================
+   MISSION END → campaign
+   ========================================================================= */
+function battleReport(won) {
+  return {
+    sectorIdx: G.sectorIdx,
+    won,
+    perSoldier: G.soldiers.map(s => ({
+      id: s.rosterId, kills: s.kills, dead: s.dead, hpFrac: Math.max(0, s.hp) / s.maxHp,
+    })),
+    breachesLeft: Math.max(0, G.breachLimit - G.breaches),
+    breachLimit: G.breachLimit,
+  };
+}
+
+function missionEnd(won, reason) {
+  if (G.state === 'DONE' || G.state === 'CHARGE') return;
+  const finale = won && G.sectorIdx === SECTORS.length - 1;
+  const res = Camp.finishMission(battleReport(won));
+  if (finale) {
+    // final sector: dispatch paper, then the charge
+    G.state = 'RESULTS';
+    ui.resultsStamp.textContent = 'FINAL DISPATCH';
+    ui.resultsTitle.textContent = 'THE GUNS FALL SILENT';
+    ui.resultsBody.innerHTML =
+      missionTallies(won, res) +
+      `<p style="margin-top:12px">The last assault is broken on the wire. The whistle is in your hand, commander. Take the men up the ridge — over the bags.</p>`;
+    ui.btnContinueWave.textContent = 'OVER THE BAGS';
+    ui.results.classList.add('visible');
+    return;
+  }
+  G.state = 'DONE';
+  const dead = G.soldiers.filter(s => s.dead);
+  ui.missionStamp.textContent = won ? 'SECTOR SECURED' : 'DRIVEN BACK';
+  ui.missionTitle.textContent = won ? G.sector.name.split('—')[0].trim() + ' HELD' : 'THE LINE IS LOST';
+  ui.missionBody.innerHTML = missionTallies(won, res) +
+    (won
+      ? `<p style="margin-top:12px">${dead.length ? 'The roll is read at dawn. ' + dead.map(s => s.name).join(', ') + ' will not answer.' : 'Every man walks back down the communication trench. Remarkable.'}</p>`
+      : `<p style="margin-top:12px">${reason === 'men'
+          ? 'The last rifle fell silent and the trench was theirs. The survivors of the section reform behind the line.'
+          : 'Too many broke through and the order came to fall back. The sector remains contested.'}
+         Reform the section and try again — the war does not wait.</p>`);
+  ui.mission.classList.add('visible');
+  Music.play(won ? 'anthem' : 'menu');
+}
+
+function missionTallies(won, res) {
+  const standing = G.soldiers.filter(s => !s.dead).length;
+  let t = `
+    <div class="tally"><span>Outcome</span><b>${won ? 'OBJECTIVE HELD' : 'WITHDRAWAL'}</b></div>
+    <div class="tally"><span>Men returning</span><b>${standing} / ${G.soldiers.length}</b></div>`;
+  for (const s of G.soldiers)
+    t += `<div class="tally"><span>${s.name}${s.dead ? ' †' : ''}</span><b>${s.kills} kills${s.dead ? ' — KIA' : ''}</b></div>`;
+  if (won) t += `
+    <div class="tally"><span>Requisition awarded</span><b>+${res.rpGain} RP</b></div>
+    <div class="tally"><span>Manpower awarded</span><b>+${res.manGain}</b></div>`;
+  return t;
 }
 
 function startCharge() {
@@ -647,31 +637,21 @@ function startCharge() {
   for (const s of G.soldiers) { s.moveTarget = null; s.manningMg = false; }
 }
 
-function defeat(reason) {
-  if (G.state === 'END') return;
-  G.state = 'END';
-  Music.play('menu');
-  ui.endKicker.textContent = 'SECTOR 7 · NIGHTFALL';
-  ui.endTitle.textContent = 'THE LINE IS LOST';
-  ui.endBody.innerHTML = reason === 'men'
-    ? '<p>The last rifle has fallen silent. The trench belongs to them now.</p><p>Command will raise another section. It will not be the same.</p>'
-    : '<p>Too many broke through. The line collapsed behind you, and the order came to fall back.</p><p>The trench belongs to them now.</p>';
-  ui.end.classList.add('visible');
-}
-
-function victory() {
-  G.state = 'END';
-  ui.endKicker.textContent = 'SECTOR 7 · DAWN';
+function campaignVictory() {
+  G.state = 'DONE';
+  ui.endKicker.textContent = 'BATTERIE RIDGE · DAWN';
   ui.endTitle.textContent = 'OVER THE BAGS';
+  const vets = Camp.state.roster.filter(s => s.status !== 'dead' && Camp.levelOf(s) >= 2).length;
+  const lost = Camp.state.roster.filter(s => s.status === 'dead').length;
   ui.endBody.innerHTML =
-    '<p>The whistle blew and the section went up the ladders, through the smoke, across the wire — and the enemy trench was yours before the sun cleared the mud.</p>' +
-    '<p>The trench was held. The push begins. Somewhere behind the lines, a division is forming — armour, recon wings, supply convoys — and they will need commanders.</p>' +
-    '<p><em>This was Sector 7. The war is wider than this.</em></p>';
+    '<p>The whistle blew and the section went up the ladders, through the smoke, past the burning armour — and the guns on the ridge fell silent, one by one, for good.</p>' +
+    `<p>Three sectors held. ${lost ? lost + ' name' + (lost > 1 ? 's' : '') + ' on the roll of honour.' : 'Not one man left behind.'} ${vets ? vets + ' veteran' + (vets > 1 ? 's' : '') + ' walking back down the hill.' : ''}</p>` +
+    '<p><em>The war is wider than this. But tonight, this part of it is yours.</em></p>';
   ui.end.classList.add('visible');
 }
 
 /* =========================================================================
-   PLACEMENT & ORDERS
+   PLACEMENT, SUPPORT & ORDERS
    ========================================================================= */
 function selectSoldier(s) {
   cancelPlacement();
@@ -679,23 +659,27 @@ function selectSoldier(s) {
   Sfx.click();
 }
 
+const PLACE_COST = { wire: () => BALANCE.wireCost, mg: () => BALANCE.mgCost, mortar: () => BALANCE.mortarCost, sniper: () => BALANCE.sniperCost };
+
 function beginPlacement(kind) {
-  const cost = kind === 'wire' ? BALANCE.wireCost : BALANCE.mgCost;
-  if (G.supplies < cost || (kind === 'mg' && G.mgNest)) {
-    addLog('HQ denies the requisition — insufficient supplies.', true);
-    return;
+  if (kind !== 'arty') {
+    if (G.supplies < PLACE_COST[kind]()) { addLog('HQ denies the requisition — insufficient supplies.', true); return; }
+    if ((kind === 'mg' && G.mgNest) || (kind === 'mortar' && G.mortar) || (kind === 'sniper' && G.sniperPost)) return;
   }
   G.placing = kind;
   G.selected = null;
   ui.btnWire.classList.toggle('active', kind === 'wire');
   ui.btnMg.classList.toggle('active', kind === 'mg');
+  ui.btnMortar.classList.toggle('active', kind === 'mortar');
+  ui.btnSniper.classList.toggle('active', kind === 'sniper');
+  ui.btnArty.classList.toggle('active', kind === 'arty');
   ui.btnCancel.hidden = false;
+  if (kind === 'arty') addLog('Battery standing by. Give the coordinates.', false, 'GUNNERS');
 }
 
 function cancelPlacement() {
   G.placing = null;
-  ui.btnWire.classList.remove('active');
-  ui.btnMg.classList.remove('active');
+  for (const b of [ui.btnWire, ui.btnMg, ui.btnMortar, ui.btnSniper, ui.btnArty]) b.classList.remove('active');
   ui.btnCancel.hidden = true;
 }
 
@@ -704,6 +688,7 @@ function placementValid(kind, x, y) {
     if (y < WIRE_ZONE.top || y > WIRE_ZONE.bot || x < 50 || x > W - 50) return false;
     return !G.wires.some(w => Math.abs(w.x - x) < 85 && Math.abs(w.y - y) < 22);
   }
+  if (kind === 'arty') return y > 120 && y < ARTILLERY.maxY && x > 40 && x < W - 40;
   return y > TRENCH_TOP + 10 && y < TRENCH_BOT && x > 40 && x < W - 40;
 }
 
@@ -713,19 +698,80 @@ function tryPlace(x, y) {
     G.invalidFlash = { x, y, t: 0.5 };
     return;
   }
+  if (kind === 'arty') { fireBarrage(x, y); cancelPlacement(); updateHUD(); return; }
+  G.supplies -= PLACE_COST[kind]();
   if (kind === 'wire') {
-    G.supplies -= BALANCE.wireCost;
     G.wires.push({ x, y, w: 90, h: 16, hp: 50, maxHp: 50 });
     addLog('Wire strung.', false, 'SECTION');
-  } else {
-    G.supplies -= BALANCE.mgCost;
-    G.mgNest = { x, y, cooldown: 0, manned: false, target: null, ang: -Math.PI / 2, shots: 0 };
+  } else if (kind === 'mg') {
+    G.mgNest = { x, y, cooldown: 0, manned: false, ang: -Math.PI / 2, shots: 0 };
     addLog('Gun emplaced. Keep a man beside it or it stays silent.', false, 'SECTION');
+    cancelPlacement();
+  } else if (kind === 'mortar') {
+    G.mortar = { x, y, cd: 2 };
+    addLog('Mortar pit dug. It will range on any bunched attack.', false, 'SECTION');
+    cancelPlacement();
+  } else if (kind === 'sniper') {
+    G.sniperPost = { x, y, cd: 1 };
+    addLog('Sniper post manned. He picks his own targets.', false, 'SECTION');
     cancelPlacement();
   }
   Sfx.build();
   smoke(x, y, 3);
   if (G.placing === 'wire' && G.supplies < BALANCE.wireCost) cancelPlacement();
+  updateHUD();
+}
+
+function fireBarrage(x, y) {
+  const st = Camp.state;
+  if (st.artCharges <= 0 || G.arty.cd > 0 || G.state !== 'WAVE') return;
+  st.artCharges--;
+  Camp.save();
+  G.arty.cd = ARTILLERY.cooldown;
+  Sfx.shellIncoming();
+  addLog('Barrage inbound. Heads down.', true, 'GUNNERS');
+  for (let i = 0; i < ARTILLERY.shells; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.random() * ARTILLERY.scatter;
+    G.incoming.push({
+      x: Math.max(30, Math.min(W - 30, x + Math.cos(a) * r)),
+      y: Math.min(510, Math.max(90, y + Math.sin(a) * r)),
+      t: ARTILLERY.delay + i * 0.22,
+      marker: { x, y },
+    });
+  }
+}
+
+function useRecon() {
+  if (G.state !== 'PREP' || G.reconUsed) return;
+  const cost = reconPrice();
+  if (G.supplies < cost) return;
+  G.supplies -= cost;
+  G.reconUsed = true;
+  const counts = {};
+  let sumX = 0, third = [0, 0, 0];
+  for (const p of G.spawnPlan) {
+    counts[p.type] = (counts[p.type] || 0) + 1;
+    sumX += p.x;
+    third[Math.min(2, Math.floor(p.x / (W / 3)))]++;
+  }
+  const laneIdx = third.indexOf(Math.max(...third));
+  const lane = ['LEFT approach', 'CENTRE ground', 'RIGHT approach'][laneIdx];
+  const parts = Object.entries(counts)
+    .filter(([t]) => t !== 'tank')
+    .map(([t, n]) => `${n} ${ENEMY_TYPES[t].label}`);
+  addLog(`Sortie over the lines: ${parts.join(', ')} forming up. Main thrust expected on the ${lane}.`, false, 'RECON');
+  if (counts.tank) addLog(`ARMOUR CONFIRMED — ${counts.tank} vehicle${counts.tank > 1 ? 's' : ''} moving up with the assault.`, true, 'RECON');
+  else addLog('No armour observed.', false, 'RECON');
+  Sfx.click();
+  updateHUD();
+}
+
+function useRepair() {
+  if (G.state !== 'PREP' || G.breaches <= 0 || G.supplies < BALANCE.repairCost) return;
+  G.supplies -= BALANCE.repairCost;
+  G.breaches--;
+  Sfx.build();
+  addLog('Working party rebuilds the parapet. Line integrity restored.', false, 'SECTION');
   updateHUD();
 }
 
@@ -745,7 +791,6 @@ function orderMove(x, y) {
    UPDATE
    ========================================================================= */
 function update(dt) {
-  // ambient smoke always drifts
   for (const s of G.ambientSmoke) {
     s.x += s.vx * dt;
     if (s.x - s.size > W) { s.x = -s.size; s.y = 130 + Math.random() * 340; }
@@ -754,6 +799,7 @@ function update(dt) {
   if (G.moveMark) { G.moveMark.t -= dt; if (G.moveMark.t <= 0) G.moveMark = null; }
   G.shake = Math.max(0, G.shake - dt * 1.2);
   G.dangerFlash = Math.max(0, G.dangerFlash - dt);
+  G.arty.cd = Math.max(0, G.arty.cd - dt);
 
   updateParticles(dt);
   updateTracers(dt);
@@ -761,12 +807,14 @@ function update(dt) {
   if (G.state === 'CHARGE') { updateCharge(dt); return; }
   if (G.state !== 'WAVE' && G.state !== 'PREP') return;
 
+  updateShelling(dt);
   updateSoldiers(dt);
+  updateIncoming(dt);
+  updateGrenades(dt);
 
-  if (G.state !== 'WAVE') return;
+  if (G.state !== 'WAVE') { G.prepT += dt; return; }
   G.waveT += dt;
 
-  // spawns
   while (G.spawnQueue.length && G.spawnQueue[0].t <= G.waveT) {
     const s = G.spawnQueue.shift();
     spawnEnemy(s.type, s.x);
@@ -774,9 +822,10 @@ function update(dt) {
 
   updateEnemies(dt);
   updateMg(dt);
+  updateMortar(dt);
+  updateSniper(dt);
   updateShells(dt);
 
-  // distant artillery ambience
   G.ambientT -= dt;
   if (G.ambientT <= 0) {
     G.ambientT = 5 + Math.random() * 6;
@@ -785,23 +834,51 @@ function update(dt) {
     Sfx.noise(0.5, 200, 0.6, 0.12, 'lowpass');
   }
 
-  // wave cleared?
-  if (!G.spawnQueue.length && G.enemies.every(e => e.dead) && G.state === 'WAVE') {
+  if (!G.spawnQueue.length && G.enemies.every(e => e.dead) && !G.incoming.length && G.state === 'WAVE') {
     endWave();
   }
   G.enemies = G.enemies.filter(e => !e.dead);
+}
+
+/* enemy pre-assault bombardment: warn → markers → impact */
+function updateShelling(dt) {
+  const sh = G.shelling;
+  if (!sh || sh.phase === 'done') return;
+  sh.t -= dt;
+  if (sh.phase === 'wait' && sh.t <= 0) {
+    sh.phase = 'warn';
+    sh.t = PREP_SHELL.fuse;
+    sh.targets = [];
+    const living = G.soldiers.filter(s => !s.dead);
+    for (let i = 0; i < sh.shells; i++) {
+      const near = living[i % Math.max(1, living.length)];
+      const bx = near ? near.x + (Math.random() - 0.5) * 80 : 60 + Math.random() * (W - 120);
+      const by = near ? near.y + (Math.random() - 0.5) * 50 : 560 + Math.random() * 80;
+      sh.targets.push({
+        x: Math.max(40, Math.min(W - 40, bx)),
+        y: Math.max(TRENCH_TOP - 5, Math.min(TRENCH_BOT + 15, by)),
+      });
+    }
+    Sfx.shellIncoming();
+    addLog('INCOMING! Clear the marked ground!', true, 'LOOKOUT');
+  } else if (sh.phase === 'warn' && sh.t <= 0) {
+    sh.phase = 'done';
+    for (const t of sh.targets) {
+      explode(t.x, t.y, PREP_SHELL.radius, Math.round(PREP_SHELL.dmg * G.diffc.shellDmg));
+    }
+    addLog('Shelling has lifted. Reform the line.', false, 'LOOKOUT');
+  }
 }
 
 function updateSoldiers(dt) {
   for (const s of G.soldiers) {
     if (s.dead) continue;
     s.firing = Math.max(0, s.firing - dt);
-    const wounded = s.hp < 35;
+    const wounded = s.hp < s.maxHp * 0.35;
 
-    // movement
     if (s.moveTarget) {
       const d = dist(s, s.moveTarget);
-      const spd = SOLDIER.speed * (wounded ? 0.6 : 1);
+      const spd = s.speed * (wounded ? 0.6 : 1);
       if (d < 4) s.moveTarget = null;
       else {
         s.x += (s.moveTarget.x - s.x) / d * spd * dt;
@@ -811,18 +888,67 @@ function updateSoldiers(dt) {
 
     s.manningMg = !!(G.mgNest && dist(s, G.mgNest) < MG.manRadius);
 
-    // firing
+    // medic: patch nearby men (faster when the guns are quiet)
+    if (s.loadout === 'medic') {
+      const lo = LOADOUTS.medic;
+      const rate = lo.healPerSec * (G.state === 'PREP' ? lo.healPrepMult : 1) * dt;
+      for (const o of G.soldiers) {
+        if (o.dead || o === s) continue;
+        if (dist(s, o) < lo.healRadius && o.hp < o.maxHp) {
+          o.hp = Math.min(o.maxHp, o.hp + rate);
+          if (Math.random() < dt * 1.5) puff(o.x, o.y - 8, '#cfc3a0', 1);
+        }
+      }
+      if (s.hp < s.maxHp) s.hp = Math.min(s.maxHp, s.hp + rate * 0.5);
+    }
+
+    // bayonet trooper: cuts down anyone in reach
+    if (s.loadout === 'bayonet') {
+      s.meleeCd -= dt;
+      if (s.meleeCd <= 0) {
+        const close = nearestEnemy(s, 24);
+        if (close && close.type !== 'tank') {
+          s.meleeCd = LOADOUTS.bayonet.meleeRate;
+          damageEnemy(close, LOADOUTS.bayonet.meleeDmg, s);
+          puff(close.x, close.y, '#5e2f26', 4);
+          Sfx.thud();
+        }
+      }
+    }
+
+    // grenadier: bomb the clusters
+    if (s.loadout === 'grenadier' && G.state === 'WAVE') {
+      s.grenCd -= dt;
+      if (s.grenCd <= 0) {
+        const lo = LOADOUTS.grenadier;
+        let target = null;
+        for (const e of G.enemies) {
+          if (e.dead || dist(s, e) > lo.grenadeRange) continue;
+          let n = 0;
+          for (const o of G.enemies) if (!o.dead && dist(e, o) < 55) n++;
+          if (n >= lo.grenadeMinCluster && (!target || n > target.n)) target = { e, n };
+        }
+        if (target) {
+          s.grenCd = lo.grenadeCd;
+          G.grenades.push({ x: s.x, y: s.y - 4, tx: target.e.x, ty: target.e.y, t: 0, dur: 0.9, owner: s });
+          s.facing = Math.atan2(target.e.y - s.y, target.e.x - s.x);
+          Sfx.click();
+        }
+      }
+    }
+
+    // rifle
     s.cooldown -= dt;
     if (G.state === 'WAVE' && s.cooldown <= 0) {
-      const target = nearestEnemy(s, SOLDIER.range);
+      const target = nearestEnemy(s, s.range);
       if (target) {
-        s.cooldown = SOLDIER.fireRate * (wounded ? 1.5 : 1);
+        s.cooldown = s.fireRate * (wounded ? 1.5 : 1);
         s.firing = 0.3;
         s.facing = Math.atan2(target.y - s.y, target.x - s.x);
         G.tracers.push({ x1: s.x, y1: s.y - 4, x2: target.x, y2: target.y, life: 0.08 });
         flash(s.x, s.y - 4, s.facing);
         Sfx.rifle();
-        damageEnemy(target, SOLDIER.dmg);
+        damageEnemy(target, s.dmg, s);
       }
     }
   }
@@ -831,7 +957,14 @@ function updateSoldiers(dt) {
 function updateMg(dt) {
   const mg = G.mgNest;
   if (!mg) return;
-  mg.manned = G.soldiers.some(s => !s.dead && s.manningMg);
+  mg.gunner = null;
+  let gd = MG.manRadius;
+  for (const s of G.soldiers) {
+    if (s.dead || !s.manningMg) continue;
+    const d = dist(s, mg);
+    if (d < gd) { gd = d; mg.gunner = s; }
+  }
+  mg.manned = !!mg.gunner;
   mg.cooldown -= dt;
   if (!mg.manned) return;
   const target = nearestEnemy(mg, MG.range);
@@ -845,8 +978,87 @@ function updateMg(dt) {
     G.tracers.push({ x1: mg.x, y1: mg.y - 6, x2: sx, y2: sy, life: 0.06, mg: true });
     flash(mg.x, mg.y - 6, mg.ang);
     if (mg.shots % 2 === 0) Sfx.mg();
-    damageEnemy(target, MG.dmg);
+    damageEnemy(target, MG.dmg + (G.mgAmmo ? 2 : 0), mg.gunner);
   }
+}
+
+function updateMortar(dt) {
+  const m = G.mortar;
+  if (!m) return;
+  m.cd -= dt;
+  if (m.cd > 0) return;
+  // find the thickest cluster in range, away from our own trench
+  let target = null;
+  for (const e of G.enemies) {
+    if (e.dead || e.y > 505 || dist(m, e) > MORTAR.range) continue;
+    let n = 0;
+    for (const o of G.enemies) if (!o.dead && dist(e, o) < 55) n++;
+    if (n >= MORTAR.minCluster && (!target || n > target.n)) target = { e, n };
+  }
+  if (!target) return;
+  m.cd = MORTAR.cooldown;
+  Sfx.tone(300, 900, 0.25, 0.2, 'sine'); // hollow thoomp
+  smoke(m.x, m.y - 6, 2);
+  G.incoming.push({
+    x: target.e.x + (Math.random() - 0.5) * 26,
+    y: target.e.y + (Math.random() - 0.5) * 26,
+    t: MORTAR.flight, mortar: true,
+  });
+}
+
+function updateSniper(dt) {
+  const sp = G.sniperPost;
+  if (!sp) return;
+  sp.cd -= dt;
+  if (sp.cd > 0) return;
+  let target = null;
+  for (const type of SNIPER.priority) {
+    let bd = SNIPER.range;
+    for (const e of G.enemies) {
+      if (e.dead || e.type !== type) continue;
+      const d = dist(sp, e);
+      if (d < bd) { bd = d; target = e; }
+    }
+    if (target) break;
+  }
+  if (!target) return;
+  sp.cd = SNIPER.cooldown;
+  G.tracers.push({ x1: sp.x, y1: sp.y - 6, x2: target.x, y2: target.y, life: 0.12, sniper: true });
+  flash(sp.x, sp.y - 6, Math.atan2(target.y - sp.y, target.x - sp.x));
+  Sfx.sniper();
+  damageEnemy(target, SNIPER.dmg);
+}
+
+/* friendly shells (barrage + mortar) falling */
+function updateIncoming(dt) {
+  for (const sh of G.incoming) {
+    sh.t -= dt;
+    if (sh.t <= 0) {
+      sh.done = true;
+      explodeVsEnemies(sh.x, sh.y, sh.mortar ? MORTAR.radius : ARTILLERY.radius,
+        sh.mortar ? MORTAR.dmg : ARTILLERY.dmg, !sh.mortar);
+    }
+  }
+  G.incoming = G.incoming.filter(s => !s.done);
+}
+
+function updateGrenades(dt) {
+  for (const g of G.grenades) {
+    g.t += dt;
+    if (g.t >= g.dur) {
+      g.done = true;
+      const lo = LOADOUTS.grenadier;
+      Sfx.boom(0.55);
+      G.shake = Math.max(G.shake, 0.2);
+      smoke(g.tx, g.ty, 4, 1);
+      puff(g.tx, g.ty, '#c8b46a', 5);
+      for (const e of G.enemies) {
+        if (!e.dead && Math.hypot(e.x - g.tx, e.y - g.ty) < lo.grenadeRadius + e.r)
+          damageEnemy(e, lo.grenadeDmg, g.owner);
+      }
+    }
+  }
+  G.grenades = G.grenades.filter(g => !g.done);
 }
 
 function updateEnemies(dt) {
@@ -854,13 +1066,12 @@ function updateEnemies(dt) {
     if (e.dead) continue;
     e.wobble += dt * 3;
 
-    // wire check
     let speedMult = 1;
     for (const w of G.wires) {
       if (w.hp <= 0) continue;
       if (Math.abs(e.x - w.x) < w.w / 2 + e.r && Math.abs(e.y - w.y) < w.h / 2 + e.r) {
         speedMult = Math.min(speedMult, e.wireSlow);
-        if (e.type === 'tank') { w.hp -= 60 * dt; } // crushed under treads
+        if (e.type === 'tank') { w.hp -= 60 * dt; }
         else { damageEnemy(e, 4 * dt); w.hp -= 2 * dt; }
         if (w.hp <= 0) puff(w.x, w.y, '#4a4438', 5);
       }
@@ -869,7 +1080,6 @@ function updateEnemies(dt) {
 
     if (e.type === 'tank') { updateTank(e, dt, speedMult); continue; }
 
-    // melee if at the trench
     if (e.y >= TRENCH_TOP - 8) {
       if (!e.victim || e.victim.dead) e.victim = nearestLivingSoldier(e, 380);
       if (e.victim) {
@@ -881,12 +1091,11 @@ function updateEnemies(dt) {
           e.meleeT -= dt;
           if (e.meleeT <= 0) {
             e.meleeT = e.hitRate;
-            damageSoldier(e.victim, e.dmg);
+            damageSoldier(e.victim, e.dmg, e);
           }
         }
         continue;
       }
-      // nobody nearby to fight — push through
     }
     e.y += e.speed * speedMult * dt;
     e.x += Math.sin(e.wobble) * 6 * dt;
@@ -954,7 +1163,7 @@ function updateCharge(dt) {
     Sfx.boom(0.3);
     G.shake = Math.max(G.shake, 0.15);
   }
-  if (G.chargeT > 4.5) victory();
+  if (G.chargeT > 4.5) campaignVictory();
 }
 
 /* =========================================================================
@@ -971,10 +1180,15 @@ function render() {
   drawPlacementZones();
   drawWires();
   drawMg();
+  drawMortarPit();
+  drawSniperPost();
   drawAmbientSmoke();
+  drawShellWarnings();
   drawEnemies();
   drawSoldiers();
   drawShells();
+  drawIncoming();
+  drawGrenades();
   drawTracers();
   drawParticles();
   drawMarkers();
@@ -993,28 +1207,26 @@ function render() {
 
 function drawPlacementZones() {
   if (!G.placing) return;
-  ctx.fillStyle = 'rgba(201,162,75,.08)';
-  ctx.strokeStyle = 'rgba(201,162,75,.35)';
+  const brass = G.placing !== 'arty';
+  ctx.fillStyle = brass ? 'rgba(201,162,75,.08)' : 'rgba(163,60,46,.07)';
+  ctx.strokeStyle = brass ? 'rgba(201,162,75,.35)' : 'rgba(163,60,46,.4)';
   ctx.setLineDash([8, 6]);
   ctx.lineWidth = 1;
-  if (G.placing === 'wire') {
-    ctx.fillRect(50, WIRE_ZONE.top, W - 100, WIRE_ZONE.bot - WIRE_ZONE.top);
-    ctx.strokeRect(50, WIRE_ZONE.top, W - 100, WIRE_ZONE.bot - WIRE_ZONE.top);
-  } else {
-    ctx.fillRect(40, TRENCH_TOP + 10, W - 80, TRENCH_BOT - TRENCH_TOP - 10);
-    ctx.strokeRect(40, TRENCH_TOP + 10, W - 80, TRENCH_BOT - TRENCH_TOP - 10);
-  }
+  let x, y, w, h;
+  if (G.placing === 'wire') { x = 50; y = WIRE_ZONE.top; w = W - 100; h = WIRE_ZONE.bot - WIRE_ZONE.top; }
+  else if (G.placing === 'arty') { x = 40; y = 120; w = W - 80; h = ARTILLERY.maxY - 120; }
+  else { x = 40; y = TRENCH_TOP + 10; w = W - 80; h = TRENCH_BOT - TRENCH_TOP - 10; }
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeRect(x, y, w, h);
   ctx.setLineDash([]);
 }
 
 function drawWireSprite(x, y, w, frac) {
-  // posts
   ctx.strokeStyle = '#4d4636';
   ctx.lineWidth = 3;
   for (const px of [x - w / 2, x, x + w / 2]) {
     ctx.beginPath(); ctx.moveTo(px, y - 8); ctx.lineTo(px, y + 8); ctx.stroke();
   }
-  // strands (fewer as it wears)
   ctx.strokeStyle = '#6a6252';
   ctx.lineWidth = 1.4;
   const strands = frac > 0.66 ? 3 : frac > 0.33 ? 2 : 1;
@@ -1030,18 +1242,20 @@ function drawWires() {
   for (const w of G.wires) drawWireSprite(w.x, w.y, w.w, w.hp / w.maxHp);
 }
 
-function drawMg() {
-  const mg = G.mgNest;
-  if (!mg) return;
-  // sandbag ring
+function sandbagArc(x, y) {
   ctx.fillStyle = '#574c34';
   ctx.strokeStyle = 'rgba(15,12,7,.7)';
   for (let a = Math.PI * 0.15; a < Math.PI * 0.85; a += 0.5) {
-    const bx = mg.x + Math.cos(a + Math.PI) * 18, by = mg.y + Math.sin(a + Math.PI) * 14;
+    const bx = x + Math.cos(a + Math.PI) * 18, by = y + Math.sin(a + Math.PI) * 14;
     roundRect(ctx, bx - 8, by - 4, 16, 9, 4);
     ctx.fill(); ctx.stroke();
   }
-  // gun
+}
+
+function drawMg() {
+  const mg = G.mgNest;
+  if (!mg) return;
+  sandbagArc(mg.x, mg.y);
   ctx.save();
   ctx.translate(mg.x, mg.y - 4);
   ctx.rotate(mg.ang);
@@ -1049,13 +1263,47 @@ function drawMg() {
   ctx.fillRect(0, -2.5, 22, 5);
   ctx.fillRect(-6, -5, 10, 10);
   ctx.restore();
-  // manned indicator
   if (!mg.manned) {
     ctx.fillStyle = 'rgba(163,60,46,.9)';
     ctx.font = '10px Staatliches, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('UNMANNED', mg.x, mg.y + 24);
   }
+}
+
+function drawMortarPit() {
+  const m = G.mortar;
+  if (!m) return;
+  ctx.fillStyle = '#2a2517';
+  ctx.beginPath(); ctx.arc(m.x, m.y, 13, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#574c34';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(m.x, m.y, 14, 0, 7); ctx.stroke();
+  // tube
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  ctx.rotate(-Math.PI / 3);
+  ctx.fillStyle = '#1d1b14';
+  ctx.fillRect(-2.5, -16, 5, 16);
+  ctx.restore();
+  ctx.fillStyle = '#3a3226';
+  ctx.fillRect(m.x - 5, m.y + 2, 10, 3);
+}
+
+function drawSniperPost() {
+  const sp = G.sniperPost;
+  if (!sp) return;
+  sandbagArc(sp.x, sp.y);
+  // long rifle
+  ctx.save();
+  ctx.translate(sp.x, sp.y - 5);
+  ctx.rotate(-Math.PI / 2 + Math.sin(performance.now() / 900) * 0.15);
+  ctx.strokeStyle = '#26221a';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(26, 0); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#8a8c60';
+  ctx.beginPath(); ctx.arc(sp.x, sp.y - 2, 5, 0, 7); ctx.fill();
 }
 
 function drawAmbientSmoke() {
@@ -1065,6 +1313,33 @@ function drawAmbientSmoke() {
     g.addColorStop(1, 'rgba(120,110,88,0)');
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, 7); ctx.fill();
+  }
+}
+
+/* enemy shelling warnings + friendly barrage markers */
+function drawShellWarnings() {
+  const sh = G.shelling;
+  if (sh && sh.phase === 'warn') {
+    const pulse = 0.55 + Math.sin(performance.now() / 110) * 0.25;
+    for (const t of sh.targets) {
+      ctx.strokeStyle = `rgba(180,40,25,${pulse})`;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.arc(t.x, t.y, PREP_SHELL.radius, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(t.x - 6, t.y); ctx.lineTo(t.x + 6, t.y);
+      ctx.moveTo(t.x, t.y - 6); ctx.lineTo(t.x, t.y + 6);
+      ctx.stroke();
+    }
+  }
+  // friendly barrage target flare
+  for (const inc of G.incoming) {
+    if (inc.mortar) continue;
+    const pulse = 0.4 + Math.sin(performance.now() / 90) * 0.2;
+    ctx.strokeStyle = `rgba(201,162,75,${pulse})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(inc.x, inc.y, 10, 0, 7); ctx.stroke();
   }
 }
 
@@ -1083,7 +1358,6 @@ function unitShadow(x, y, r) {
 function drawSoldiers() {
   for (const s of G.soldiers) {
     if (s.dead) {
-      // grave cross
       ctx.strokeStyle = '#4d4636';
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -1094,28 +1368,39 @@ function drawSoldiers() {
     }
     const sel = G.selected === s;
     if (sel) {
-      // range ring
       ctx.strokeStyle = 'rgba(201,162,75,.25)';
       ctx.setLineDash([6, 8]);
       ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(s.x, s.y, SOLDIER.range, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.range, 0, 7); ctx.stroke();
       ctx.setLineDash([]);
       ctx.strokeStyle = '#c9a24b';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(s.x, s.y, 13, 0, 7); ctx.stroke();
     }
     unitShadow(s.x, s.y, 8);
-    // body
-    ctx.fillStyle = s.hp < 35 ? '#797a50' : '#8a8c60';
+    const wounded = s.hp < s.maxHp * 0.35;
+    ctx.fillStyle = wounded ? '#797a50' : '#8a8c60';
     ctx.strokeStyle = '#22221a';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(s.x, s.y, 8, 0, 7); ctx.fill(); ctx.stroke();
-    // helmet
     ctx.fillStyle = '#a3a476';
     ctx.beginPath(); ctx.ellipse(s.x, s.y - 3, 6.5, 4.5, 0, Math.PI, 0); ctx.fill();
     ctx.strokeStyle = 'rgba(240,235,200,.35)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.ellipse(s.x, s.y - 3.5, 5.5, 3.5, 0, Math.PI * 1.1, Math.PI * 1.7); ctx.stroke();
+    // role pip
+    ctx.fillStyle = LOADOUTS[s.loadout].color;
+    ctx.strokeStyle = '#14110c';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(s.x + 6.5, s.y + 4, 3, 0, 7); ctx.fill(); ctx.stroke();
+    // veteran chevron
+    if (s.level > 0) {
+      ctx.strokeStyle = s.level >= 2 ? '#c9a24b' : '#a3a476';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(s.x - 4, s.y + 12); ctx.lineTo(s.x, s.y + 9); ctx.lineTo(s.x + 4, s.y + 12);
+      ctx.stroke();
+    }
     // rifle
     ctx.save();
     ctx.translate(s.x, s.y);
@@ -1124,12 +1409,12 @@ function drawSoldiers() {
     ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.moveTo(4, 3); ctx.lineTo(15, 3); ctx.stroke();
     ctx.restore();
-    if (s.hp < SOLDIER.hp) drawHpBar(s.x, s.y - 16, 22, s.hp / SOLDIER.hp);
+    if (s.hp < s.maxHp) drawHpBar(s.x, s.y - 16, 22, s.hp / s.maxHp);
     if (s.manningMg) {
       ctx.fillStyle = 'rgba(201,162,75,.9)';
       ctx.font = '9px Staatliches, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('MG', s.x, s.y + 18);
+      ctx.fillText('MG', s.x, s.y + 21);
     }
   }
 }
@@ -1140,17 +1425,14 @@ function drawEnemies() {
     if (e.type === 'tank') {
       ctx.save();
       ctx.translate(e.x, e.y);
-      // treads
       ctx.fillStyle = '#26241c';
       ctx.fillRect(-19, -24, 8, 48);
       ctx.fillRect(11, -24, 8, 48);
-      // hull
       ctx.fillStyle = '#4b4a3a';
       ctx.strokeStyle = '#1c1b14';
       ctx.lineWidth = 2;
       ctx.fillRect(-13, -20, 26, 40);
       ctx.strokeRect(-13, -20, 26, 40);
-      // turret + barrel
       ctx.fillStyle = '#3d3c2f';
       ctx.beginPath(); ctx.arc(0, -2, 9, 0, 7); ctx.fill(); ctx.stroke();
       ctx.fillStyle = '#26241c';
@@ -1167,19 +1449,18 @@ function drawEnemies() {
     ctx.strokeStyle = '#14110c';
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(ex, e.y, e.r, 0, 7); ctx.fill(); ctx.stroke();
-    // helmet (pointed enemy silhouette, catches light)
     ctx.fillStyle = '#48413a';
     ctx.beginPath();
     ctx.ellipse(ex, e.y + 3, e.r * 0.72, e.r * 0.48, 0, 0, Math.PI);
     ctx.fill();
     ctx.fillStyle = 'rgba(200,185,150,.25)';
     ctx.beginPath(); ctx.arc(ex - e.r * 0.3, e.y - e.r * 0.35, e.r * 0.3, 0, 7); ctx.fill();
-    if (e.type === 'heavy') { // armor plate
+    if (e.type === 'heavy') {
       ctx.strokeStyle = '#8c8170';
       ctx.lineWidth = 2.5;
       ctx.beginPath(); ctx.arc(ex, e.y, e.r - 3, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
     }
-    if (e.type === 'raider') { // motion dashes
+    if (e.type === 'raider') {
       ctx.strokeStyle = 'rgba(150,132,105,.6)';
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(ex - 12, e.y - 6); ctx.lineTo(ex - 5, e.y - 6);
@@ -1194,20 +1475,43 @@ function drawShells() {
     const f = sh.t / sh.dur;
     const x = sh.x + (sh.tx - sh.x) * f;
     const y = sh.y + (sh.ty - sh.y) * f - Math.sin(f * Math.PI) * 60;
-    // target marker
     ctx.strokeStyle = `rgba(163,60,46,${0.4 + f * 0.5})`;
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(sh.tx, sh.ty, 10 * (1 - f * 0.5), 0, 7); ctx.stroke();
-    // shell
     ctx.fillStyle = '#26241c';
     ctx.beginPath(); ctx.arc(x, y, 3.5, 0, 7); ctx.fill();
   }
 }
 
+function drawIncoming() {
+  // falling friendly shells: brief streak just before impact
+  for (const sh of G.incoming) {
+    if (sh.t < 0.35) {
+      const f = sh.t / 0.35;
+      ctx.strokeStyle = `rgba(230,215,170,${0.7 * (1 - f)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sh.x + 10 * f, sh.y - 70 * f);
+      ctx.lineTo(sh.x, sh.y);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawGrenades() {
+  for (const g of G.grenades) {
+    const f = g.t / g.dur;
+    const x = g.x + (g.tx - g.x) * f;
+    const y = g.y + (g.ty - g.y) * f - Math.sin(f * Math.PI) * 40;
+    ctx.fillStyle = '#2c2a20';
+    ctx.beginPath(); ctx.arc(x, y, 2.5, 0, 7); ctx.fill();
+  }
+}
+
 function drawTracers() {
   for (const t of G.tracers) {
-    ctx.strokeStyle = t.mg ? 'rgba(255,200,120,.95)' : 'rgba(255,230,170,.85)';
-    ctx.lineWidth = t.mg ? 2.2 : 1.6;
+    ctx.strokeStyle = t.sniper ? 'rgba(255,245,200,1)' : t.mg ? 'rgba(255,200,120,.95)' : 'rgba(255,230,170,.85)';
+    ctx.lineWidth = t.sniper ? 1.4 : t.mg ? 2.2 : 1.6;
     ctx.beginPath(); ctx.moveTo(t.x1, t.y1); ctx.lineTo(t.x2, t.y2); ctx.stroke();
   }
 }
@@ -1255,8 +1559,21 @@ function drawGhost() {
   const { x, y } = G.mouse;
   const ok = placementValid(G.placing, x, y);
   ctx.globalAlpha = 0.6;
-  if (G.placing === 'wire') {
-    drawWireSprite(x, y, 90, 1);
+  if (G.placing === 'wire') drawWireSprite(x, y, 90, 1);
+  else if (G.placing === 'arty') {
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = ok ? 'rgba(201,162,75,.9)' : 'rgba(163,60,46,.9)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(x, y, ARTILLERY.radius + ARTILLERY.scatter * 0.6, 0, 7); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y); ctx.lineTo(x + 10, y);
+    ctx.moveTo(x, y - 10); ctx.lineTo(x, y + 10);
+    ctx.stroke();
+    return;
+  }
+  else if (G.placing === 'mortar') {
+    ctx.fillStyle = '#2a2517';
+    ctx.beginPath(); ctx.arc(x, y, 13, 0, 7); ctx.fill();
   } else {
     ctx.fillStyle = '#574c34';
     ctx.beginPath(); ctx.arc(x, y, 16, Math.PI, 0); ctx.fill();
@@ -1293,7 +1610,6 @@ canvas.addEventListener('click', ev => {
   if (G.paused) return;
   const p = fieldCoords(ev);
   if (G.placing) { tryPlace(p.x, p.y); return; }
-  // pick a soldier?
   let pick = null, bd = 20;
   for (const s of G.soldiers) {
     if (s.dead) continue;
@@ -1311,12 +1627,12 @@ canvas.addEventListener('contextmenu', ev => {
 });
 
 document.addEventListener('keydown', ev => {
-  if (G.state === 'MENU' || G.state === 'END') return;
+  if (G.state !== 'PREP' && G.state !== 'WAVE') return;
   const k = ev.key.toLowerCase();
   if (k === 'escape') { cancelPlacement(); G.selected = null; }
   else if (k === 'p') togglePause();
   else if (k === 'm') toggleMute();
-  else if (k >= '1' && k <= '4') {
+  else if (k >= '1' && k <= '6') {
     const s = G.soldiers[+k - 1];
     if (s && !s.dead) selectSoldier(s);
   }
@@ -1340,19 +1656,26 @@ ui.btnPause.addEventListener('click', togglePause);
 ui.btnMute.addEventListener('click', toggleMute);
 ui.btnWire.addEventListener('click', () => beginPlacement('wire'));
 ui.btnMg.addEventListener('click', () => beginPlacement('mg'));
+ui.btnMortar.addEventListener('click', () => beginPlacement('mortar'));
+ui.btnSniper.addEventListener('click', () => beginPlacement('sniper'));
+ui.btnArty.addEventListener('click', () => beginPlacement('arty'));
+ui.btnRecon.addEventListener('click', useRecon);
+ui.btnRepair.addEventListener('click', useRepair);
 ui.btnCancel.addEventListener('click', cancelPlacement);
 ui.btnWave.addEventListener('click', startWave);
-ui.btnContinue.addEventListener('click', continueFromResults);
-$('btn-restart').addEventListener('click', () => location.reload());
-
-/* Menu: any click starts the theme; Begin Command starts the game */
-ui.menu.addEventListener('pointerdown', () => {
-  Sfx.ensure();
-  if (G.state === 'MENU') Music.play('menu');
-}, { once: false });
-$('btn-begin').addEventListener('click', () => {
-  Sfx.ensure();
-  startGame();
+ui.btnContinueWave.addEventListener('click', () => {
+  ui.results.classList.remove('visible');
+  if (G.state === 'RESULTS' && G.wave === G.sector.waves.length - 1) { startCharge(); return; }
+  G.wave++;
+  enterPrep();
+});
+ui.btnMissionContinue.addEventListener('click', () => {
+  ui.mission.classList.remove('visible');
+  Camp.toMap();
+});
+ui.btnEndContinue.addEventListener('click', () => {
+  ui.end.classList.remove('visible');
+  Camp.toMap();
 });
 
 /* =========================================================================
@@ -1361,14 +1684,15 @@ $('btn-begin').addEventListener('click', () => {
 Music.init();
 
 // dev/debug hook (harmless in play; lets you inspect state from the console)
-window.__otb = { G, update, startWave };
+window.__otb = { G, update, startWave, missionEnd };
 
 let lastT = performance.now();
 let rosterTimer = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
-  if (G.state !== 'MENU') {
+  const active = G.state !== 'IDLE' && !$id('game-root').hidden;
+  if (active) {
     if (!G.paused) update(dt);
     render();
     rosterTimer -= dt;
