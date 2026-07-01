@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Over the Bags — Hold the Line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Staatliches&family=Special+Elite&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ START MENU ============ -->
+<div id="menu-screen" class="overlay visible">
+  <div class="menu-inner">
+    <div class="menu-kicker">WESTERN FRONT &middot; 1917 &middot; SECTOR 7</div>
+    <h1 class="menu-title">OVER<span class="title-rule"></span>THE BAGS</h1>
+    <div class="menu-sub">A TRENCH COMMAND OPERATION</div>
+    <div class="menu-brief">
+      <p>Four soldiers. One trench. The enemy is coming across no man's land.</p>
+      <p>Hold the line through five assaults &mdash; then take them over the bags.</p>
+    </div>
+    <button id="btn-begin" class="btn btn-big">BEGIN COMMAND</button>
+    <div class="menu-note">Music begins on command. Click a soldier to select &middot; click ground to move.</div>
+  </div>
+</div>
+
+<!-- ============ GAME ============ -->
+<div id="game-root" hidden>
+  <header id="topbar">
+    <div class="topbar-title">OVER THE BAGS</div>
+    <div class="topbar-stats">
+      <div class="stat"><span class="stat-label">ASSAULT</span><span id="stat-wave" class="stat-value">&mdash;</span></div>
+      <div class="stat"><span class="stat-label">SUPPLIES</span><span id="stat-supplies" class="stat-value brass">0</span></div>
+      <div class="stat"><span class="stat-label">LINE INTEGRITY</span><span id="stat-breach" class="stat-value">&#9679;&#9679;&#9679;&#9679;</span></div>
+    </div>
+    <div class="topbar-buttons">
+      <button id="btn-pause" class="btn btn-small" title="Pause (P)">PAUSE</button>
+      <button id="btn-mute" class="btn btn-small" title="Mute (M)">SOUND ON</button>
+    </div>
+  </header>
+
+  <main id="layout">
+    <div id="field-wrap">
+      <canvas id="field" width="900" height="700"></canvas>
+      <div id="pause-veil" hidden><span>OPERATION SUSPENDED</span></div>
+    </div>
+
+    <aside id="panel">
+      <section class="panel-block" id="commander-block">
+        <h2 class="panel-h">FIELD TELEGRAPH</h2>
+        <div id="cmd-log"></div>
+      </section>
+
+      <section class="panel-block">
+        <h2 class="panel-h">THE SECTION</h2>
+        <div id="roster"></div>
+      </section>
+
+      <section class="panel-block">
+        <h2 class="panel-h">FORTIFICATIONS</h2>
+        <div id="build-bar">
+          <button id="btn-wire" class="btn btn-build">
+            <span class="build-name">BARBED WIRE</span>
+            <span class="build-cost">20 SUPPLIES</span>
+          </button>
+          <button id="btn-mg" class="btn btn-build">
+            <span class="build-name">MG NEST</span>
+            <span class="build-cost">50 SUPPLIES</span>
+          </button>
+          <button id="btn-cancel" class="btn btn-build btn-cancel" hidden>CANCEL PLACEMENT</button>
+        </div>
+        <div id="build-hint" class="small-note">Wire slows the enemy. The gun needs a man beside it.<br>Keys: 1&ndash;4 select &middot; right-click deselect &middot; P pause &middot; M mute</div>
+      </section>
+
+      <section class="panel-block">
+        <h2 class="panel-h">ORDERS</h2>
+        <div id="objective" class="small-note">Hold the trench. Survive 5 assaults.</div>
+        <div id="wave-pips"></div>
+        <button id="btn-wave" class="btn btn-big btn-wave">STAND TO &mdash; BEGIN ASSAULT</button>
+      </section>
+
+      <section class="panel-block panel-locked">
+        <h2 class="panel-h">REQUISITIONS &mdash; DENIED</h2>
+        <div class="small-note locked-list">
+          Armoured Company &middot; Recon Wing &middot; Supply Convoy &middot; Reserve Platoon<br>
+          <em>"Divisional assets are committed elsewhere. Make do." &mdash; HQ</em>
+        </div>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<!-- ============ WAVE RESULTS ============ -->
+<div id="results-screen" class="overlay">
+  <div class="paper">
+    <div class="paper-stamp" id="results-stamp">LINE HELD</div>
+    <h2 id="results-title" class="paper-h">ASSAULT REPULSED</h2>
+    <div id="results-body" class="paper-body"></div>
+    <button id="btn-continue" class="btn btn-big">RETURN TO POSITIONS</button>
+  </div>
+</div>
+
+<!-- ============ END SCREENS ============ -->
+<div id="end-screen" class="overlay">
+  <div class="menu-inner">
+    <div class="menu-kicker" id="end-kicker"></div>
+    <h1 class="menu-title end-title" id="end-title"></h1>
+    <div class="menu-brief" id="end-body"></div>
+    <button id="btn-restart" class="btn btn-big">RETURN TO COMMAND</button>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
