@@ -1,5 +1,5 @@
 /* =========================================================================
-   OVER THE BAGS — campaign: persistent state, save/load, roster,
+   OVER THE BAGS - campaign: persistent state, save/load, roster,
    and the menu / map / muster screens. Battle lives in game.js.
    ========================================================================= */
 'use strict';
@@ -157,7 +157,7 @@ const Camp = {
         + (i === this.selectedSector ? ' pin-selected' : '');
       el.style.left = sec.pin.x + '%';
       el.style.top = sec.pin.y + '%';
-      el.innerHTML = `<div class="pin-marker"></div><div class="pin-label">${sec.name.split('—')[0].trim()}</div>`;
+      el.innerHTML = `<div class="pin-marker"></div><div class="pin-label">${sec.name.split('-')[0].trim()}</div>`;
       if (unlocked) el.addEventListener('click', () => { this.selectedSector = i; this.renderMap(); });
       pins.appendChild(el);
     });
@@ -171,11 +171,11 @@ const Camp = {
     document.getElementById('brief-pips').textContent =
       '◆'.repeat(sec.diffPips) + '◇'.repeat(3 - sec.diffPips);
     document.getElementById('brief-status').textContent =
-      done ? 'SECTOR SECURED' : unlocked ? 'ORDERS ACTIVE' : 'LOCKED — SECURE THE PREVIOUS SECTOR';
+      done ? 'SECTOR SECURED' : unlocked ? 'ORDERS ACTIVE' : 'LOCKED - SECURE THE PREVIOUS SECTOR';
     document.getElementById('brief-status').className = 'brief-status ' + (done ? 'st-done' : unlocked ? 'st-open' : 'st-locked');
     document.getElementById('brief-text').textContent = unlocked ? sec.briefing : 'No orders. The line has not advanced this far.';
-    document.getElementById('brief-threat').textContent = unlocked ? sec.threat : '—';
-    document.getElementById('brief-approach').textContent = unlocked ? sec.approach : '—';
+    document.getElementById('brief-threat').textContent = unlocked ? sec.threat : '-';
+    document.getElementById('brief-approach').textContent = unlocked ? sec.approach : '-';
     const btn = document.getElementById('btn-muster');
     btn.disabled = !unlocked;
     btn.textContent = done ? 'REINFORCE THE SECTOR' : 'MUSTER THE SECTION';
@@ -202,7 +202,7 @@ const Camp = {
 
   renderMuster() {
     const st = this.state, sec = SECTORS[this.selectedSector];
-    document.getElementById('muster-title').textContent = 'MUSTER — ' + sec.name;
+    document.getElementById('muster-title').textContent = 'MUSTER - ' + sec.name;
     document.getElementById('muster-manpower').textContent = st.manpower;
     document.getElementById('muster-rp').textContent = st.rp;
     document.getElementById('muster-charges').textContent = st.artCharges;
@@ -223,7 +223,7 @@ const Camp = {
         <div class="m-info">
           <div class="m-name">${s.name} <span class="m-lvl lvl-${lvl}">${LEVEL_NAMES[lvl]}</span></div>
           <div class="hp-bar"><div class="hp-fill ${s.hp < BALANCE.woundedBelow ? 'low' : ''}" style="width:${s.hp}%"></div></div>
-          <div class="m-status">${s.status === 'dead' ? 'KILLED IN ACTION' : s.status === 'wounded' ? `WOUNDED — ${s.hp}%` : `FIT — ${s.hp}%`}
+          <div class="m-status">${s.status === 'dead' ? 'KILLED IN ACTION' : s.status === 'wounded' ? `WOUNDED - ${s.hp}%` : `FIT - ${s.hp}%`}
             &middot; ${s.kills} kills &middot; ${s.missions} ops</div>
         </div>
         <select class="m-loadout" ${s.status === 'dead' ? 'disabled' : ''}>
@@ -269,7 +269,7 @@ const Camp = {
       const btn = document.createElement('button');
       btn.className = 'btn btn-build';
       btn.disabled = disabled;
-      btn.innerHTML = `<span class="build-name">${item.name}</span><span class="build-cost">${item.cost} RP — ${item.desc}</span>`;
+      btn.innerHTML = `<span class="build-name">${item.name}</span><span class="build-cost">${item.cost} RP - ${item.desc}</span>`;
       btn.addEventListener('click', () => { this.buyReq(item.id); });
       shop.appendChild(btn);
     }
@@ -278,7 +278,7 @@ const Camp = {
     const cost = this.deploySlotCost();
     const n = this.deployedIds.size;
     document.getElementById('deploy-summary').textContent =
-      `${n} deploying` + (cost ? ` — extra frontage costs ${cost} manpower` : ' — four deploy free');
+      `${n} deploying` + (cost ? ` - extra frontage costs ${cost} manpower` : ' - four deploy free');
     const begin = document.getElementById('btn-begin-op');
     begin.disabled = n === 0 || cost > st.manpower;
     begin.textContent = cost > st.manpower ? 'INSUFFICIENT MANPOWER' : 'BEGIN THE OPERATION';

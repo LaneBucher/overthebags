@@ -1,5 +1,5 @@
 /* =========================================================================
-   OVER THE BAGS — audio: music manager + synthesized SFX (no sample files)
+   OVER THE BAGS - audio: music manager + synthesized SFX (no sample files)
    ========================================================================= */
 'use strict';
 
@@ -12,7 +12,7 @@ const Music = {
     this.el.loop = true;
     this.el.volume = MUSIC_VOLUME;
     this.el.addEventListener('error', () => {
-      console.warn('[music] failed to load:', this.el.src, '— continuing without it');
+      console.warn('[music] failed to load:', this.el.src, '- continuing without it');
     });
   },
   play(name) {

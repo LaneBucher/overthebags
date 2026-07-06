@@ -1,5 +1,5 @@
 /* =========================================================================
-   OVER THE BAGS — battle engine.
+   OVER THE BAGS - battle engine.
    Campaign flow lives in campaign.js; data/tuning in config.js.
    ========================================================================= */
 'use strict';
@@ -126,8 +126,8 @@ function updateRoster() {
 
 function updateHUD() {
   const st = Camp.state;
-  ui.sectorName.textContent = G.sector ? G.sector.name.split('—')[0].trim() : '—';
-  ui.wave.textContent = G.sector ? `${Math.min(G.wave + 1, G.sector.waves.length)} / ${G.sector.waves.length}` : '—';
+  ui.sectorName.textContent = G.sector ? G.sector.name.split('-')[0].trim() : '-';
+  ui.wave.textContent = G.sector ? `${Math.min(G.wave + 1, G.sector.waves.length)} / ${G.sector.waves.length}` : '-';
   ui.supplies.textContent = G.supplies;
   const left = Math.max(0, G.breachLimit - G.breaches);
   ui.breach.textContent = '●'.repeat(left) + '○'.repeat(G.breaches);
@@ -147,10 +147,10 @@ function updateHUD() {
   ui.btnArty.disabled = G.state !== 'WAVE' || charges <= 0 || G.arty.cd > 0;
   ui.artyCost.textContent = charges <= 0 ? 'NO CHARGES HELD'
     : G.arty.cd > 0 ? `RELAYING ORDERS… (${Math.ceil(G.arty.cd)}s)`
-    : `${charges} CHARGE${charges > 1 ? 'S' : ''} HELD — CLICK, THEN TARGET`;
+    : `${charges} CHARGE${charges > 1 ? 'S' : ''} HELD - CLICK, THEN TARGET`;
   const rCost = reconPrice();
   ui.btnRecon.disabled = G.state !== 'PREP' || G.reconUsed || G.supplies < rCost;
-  ui.reconCost.textContent = G.reconUsed ? 'SORTIE FLOWN' : `${rCost} SUPPLIES — REVEAL THE NEXT ASSAULT`;
+  ui.reconCost.textContent = G.reconUsed ? 'SORTIE FLOWN' : `${rCost} SUPPLIES - REVEAL THE NEXT ASSAULT`;
   ui.btnRepair.disabled = G.state !== 'PREP' || G.breaches <= 0 || G.supplies < BALANCE.repairCost;
 
   // wave pips
@@ -521,12 +521,12 @@ function enterPrep() {
   G.shelling = null;
   if (waveDef.prepShell) {
     G.shelling = { phase: 'wait', t: PREP_SHELL.warnDelay, shells: waveDef.prepShell.shells, targets: [] };
-    addLog('Enemy field guns registering on our trench — be ready to MOVE.', true, 'LOOKOUT');
+    addLog('Enemy field guns registering on our trench - be ready to MOVE.', true, 'LOOKOUT');
   }
 
   const last = G.wave === G.sector.waves.length - 1;
   ui.btnWave.disabled = false;
-  ui.btnWave.textContent = last ? 'STAND TO — FINAL ASSAULT' : 'STAND TO — BEGIN ASSAULT';
+  ui.btnWave.textContent = last ? 'STAND TO - FINAL ASSAULT' : 'STAND TO - BEGIN ASSAULT';
   ui.btnWave.classList.add('hot');
   updateHUD();
 }
@@ -595,7 +595,7 @@ function missionEnd(won, reason) {
     ui.resultsTitle.textContent = 'THE GUNS FALL SILENT';
     ui.resultsBody.innerHTML =
       missionTallies(won, res) +
-      `<p style="margin-top:12px">The last assault is broken on the wire. The whistle is in your hand, commander. Take the men up the ridge — over the bags.</p>`;
+      `<p style="margin-top:12px">The last assault is broken on the wire. The whistle is in your hand, commander. Take the men up the ridge - over the bags.</p>`;
     ui.btnContinueWave.textContent = 'OVER THE BAGS';
     ui.results.classList.add('visible');
     return;
@@ -603,14 +603,14 @@ function missionEnd(won, reason) {
   G.state = 'DONE';
   const dead = G.soldiers.filter(s => s.dead);
   ui.missionStamp.textContent = won ? 'SECTOR SECURED' : 'DRIVEN BACK';
-  ui.missionTitle.textContent = won ? G.sector.name.split('—')[0].trim() + ' HELD' : 'THE LINE IS LOST';
+  ui.missionTitle.textContent = won ? G.sector.name.split('-')[0].trim() + ' HELD' : 'THE LINE IS LOST';
   ui.missionBody.innerHTML = missionTallies(won, res) +
     (won
       ? `<p style="margin-top:12px">${dead.length ? 'The roll is read at dawn. ' + dead.map(s => s.name).join(', ') + ' will not answer.' : 'Every man walks back down the communication trench. Remarkable.'}</p>`
       : `<p style="margin-top:12px">${reason === 'men'
           ? 'The last rifle fell silent and the trench was theirs. The survivors of the section reform behind the line.'
           : 'Too many broke through and the order came to fall back. The sector remains contested.'}
-         Reform the section and try again — the war does not wait.</p>`);
+         Reform the section and try again - the war does not wait.</p>`);
   ui.mission.classList.add('visible');
   Music.play(won ? 'anthem' : 'menu');
 }
@@ -621,7 +621,7 @@ function missionTallies(won, res) {
     <div class="tally"><span>Outcome</span><b>${won ? 'OBJECTIVE HELD' : 'WITHDRAWAL'}</b></div>
     <div class="tally"><span>Men returning</span><b>${standing} / ${G.soldiers.length}</b></div>`;
   for (const s of G.soldiers)
-    t += `<div class="tally"><span>${s.name}${s.dead ? ' †' : ''}</span><b>${s.kills} kills${s.dead ? ' — KIA' : ''}</b></div>`;
+    t += `<div class="tally"><span>${s.name}${s.dead ? ' †' : ''}</span><b>${s.kills} kills${s.dead ? ' - KIA' : ''}</b></div>`;
   if (won) t += `
     <div class="tally"><span>Requisition awarded</span><b>+${res.rpGain} RP</b></div>
     <div class="tally"><span>Manpower awarded</span><b>+${res.manGain}</b></div>`;
@@ -644,7 +644,7 @@ function campaignVictory() {
   const vets = Camp.state.roster.filter(s => s.status !== 'dead' && Camp.levelOf(s) >= 2).length;
   const lost = Camp.state.roster.filter(s => s.status === 'dead').length;
   ui.endBody.innerHTML =
-    '<p>The whistle blew and the section went up the ladders, through the smoke, past the burning armour — and the guns on the ridge fell silent, one by one, for good.</p>' +
+    '<p>The whistle blew and the section went up the ladders, through the smoke, past the burning armour - and the guns on the ridge fell silent, one by one, for good.</p>' +
     `<p>Three sectors held. ${lost ? lost + ' name' + (lost > 1 ? 's' : '') + ' on the roll of honour.' : 'Not one man left behind.'} ${vets ? vets + ' veteran' + (vets > 1 ? 's' : '') + ' walking back down the hill.' : ''}</p>` +
     '<p><em>The war is wider than this. But tonight, this part of it is yours.</em></p>';
   ui.end.classList.add('visible');
@@ -663,7 +663,7 @@ const PLACE_COST = { wire: () => BALANCE.wireCost, mg: () => BALANCE.mgCost, mor
 
 function beginPlacement(kind) {
   if (kind !== 'arty') {
-    if (G.supplies < PLACE_COST[kind]()) { addLog('HQ denies the requisition — insufficient supplies.', true); return; }
+    if (G.supplies < PLACE_COST[kind]()) { addLog('HQ denies the requisition - insufficient supplies.', true); return; }
     if ((kind === 'mg' && G.mgNest) || (kind === 'mortar' && G.mortar) || (kind === 'sniper' && G.sniperPost)) return;
   }
   G.placing = kind;
@@ -760,7 +760,7 @@ function useRecon() {
     .filter(([t]) => t !== 'tank')
     .map(([t, n]) => `${n} ${ENEMY_TYPES[t].label}`);
   addLog(`Sortie over the lines: ${parts.join(', ')} forming up. Main thrust expected on the ${lane}.`, false, 'RECON');
-  if (counts.tank) addLog(`ARMOUR CONFIRMED — ${counts.tank} vehicle${counts.tank > 1 ? 's' : ''} moving up with the assault.`, true, 'RECON');
+  if (counts.tank) addLog(`ARMOUR CONFIRMED - ${counts.tank} vehicle${counts.tank > 1 ? 's' : ''} moving up with the assault.`, true, 'RECON');
   else addLog('No armour observed.', false, 'RECON');
   Sfx.click();
   updateHUD();

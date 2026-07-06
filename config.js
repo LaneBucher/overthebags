@@ -1,5 +1,5 @@
 /* =========================================================================
-   OVER THE BAGS — config: every tuning value and data table lives here.
+   OVER THE BAGS - config: every tuning value and data table lives here.
    ========================================================================= */
 'use strict';
 
@@ -68,7 +68,7 @@ const LOADOUTS = {
   },
   medic: {
     name: 'Medic', tag: 'MED', color: '#b0a184',
-    desc: 'Light combat power, but patches men nearby — faster when the guns are quiet. Keeps a wounded section on its feet.',
+    desc: 'Light combat power, but patches men nearby - faster when the guns are quiet. Keeps a wounded section on its feet.',
     stats: { range: 180, dmg: 6 },
     healPerSec: 3, healRadius: 90, healPrepMult: 2,
   },
@@ -150,7 +150,7 @@ const REQ_SHOP = [
    prepShell: enemy shelling of YOUR trench during the prep before that wave. */
 const SECTORS = [
   {
-    id: 's7', name: 'SECTOR 7 — THE MUD LINE',
+    id: 's7', name: 'SECTOR 7 - THE MUD LINE',
     pin: { x: 22, y: 62 },
     briefing: 'A quiet stretch of the line, about to stop being quiet. Hold the trench through five assaults and the road behind stays ours.',
     threat: 'Balanced infantry assaults. One armoured vehicle reported in reserve.',
@@ -175,14 +175,14 @@ const SECTORS = [
     ],
     preMsg: [
       'Listening post reports movement across the wire. First assault expected within the hour. Dig in.',
-      'They tested us. Expect them faster this time — raiders move ahead of the line.',
+      'They tested us. Expect them faster this time - raiders move ahead of the line.',
       'Intel warns of heavy stormtroopers in the next push. Rifles alone may not stop them.',
       'No reinforcements. HQ says hold at any cost. The next assault will be the worst yet.',
-      'URGENT — enemy ARMOUR reported near the forward line. Stop it here.',
+      'URGENT - enemy ARMOUR reported near the forward line. Stop it here.',
     ],
     postMsg: [
       'Good work. Supplies have been authorized. They will be back.',
-      'Line held. HQ sends its compliments — and nothing else.',
+      'Line held. HQ sends its compliments - and nothing else.',
       'You need to hold a while longer. Make it count.',
       'One more push and they break. Make ready.',
     ],
@@ -190,7 +190,7 @@ const SECTORS = [
   {
     id: 'orane', name: 'SAINT ORANE ROAD',
     pin: { x: 50, y: 40 },
-    briefing: 'A sunken road the enemy wants back. Their raiding parties move fast and come around the shoulders of the line. Watch your flanks and count your men — replacements are scarce out here.',
+    briefing: 'A sunken road the enemy wants back. Their raiding parties move fast and come around the shoulders of the line. Watch your flanks and count your men - replacements are scarce out here.',
     threat: 'Raider-heavy. Persistent flanking on both edges. Enemy field guns range your trench between assaults.',
     approach: 'Wire the flanks, keep a fast rifle loose to plug gaps, and move when the shelling markers appear.',
     diffPips: 2,
@@ -224,7 +224,7 @@ const SECTORS = [
     postMsg: [
       'Road intact. Keep your men spread and your eyes open.',
       'HQ notes your losses. Replacements are not coming tonight.',
-      'Good shooting. Their guns will answer for it — stay loose.',
+      'Good shooting. Their guns will answer for it - stay loose.',
       'They are running out of men faster than you are. Barely.',
     ],
   },
@@ -260,7 +260,7 @@ const SECTORS = [
                  { type: 'tank',     n: 2,  start: 12, gap: 16, burst: 1 }] },
     ],
     preMsg: [
-      'The ridge is awake. Heavy squads forming on the slope — they know we are coming for the guns.',
+      'The ridge is awake. Heavy squads forming on the slope - they know we are coming for the guns.',
       'Their batteries are firing over open sights now. Keep moving between assaults.',
       'ARMOUR on the slope. More behind it. Spend your barrages well.',
       'HQ asks if you can hold. Tell them yes and make it true.',
