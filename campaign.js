@@ -1,7 +1,4 @@
-/* =========================================================================
-   OVER THE BAGS - campaign: persistent state, save/load, roster,
-   and the menu / map / muster screens. Battle lives in game.js.
-   ========================================================================= */
+// Campaign save data and menu/map/muster screens.
 'use strict';
 
 const SAVE_KEY = 'otb_campaign_v1';
@@ -11,7 +8,7 @@ const Camp = {
   selectedSector: 0,
   deployedIds: new Set(),
 
-  /* ---------------- state / persistence ---------------- */
+  // State and persistence
   freshState(difficulty) {
     let nextId = 1;
     const roster = NAME_POOL.slice(0, 4).map(name => ({
@@ -41,7 +38,7 @@ const Camp = {
   reset() { localStorage.removeItem(SAVE_KEY); this.state = null; },
   diff() { return DIFFICULTY[this.state.difficulty] || DIFFICULTY.regular; },
 
-  /* ---------------- roster helpers ---------------- */
+  // Roster helpers
   levelOf(s) {
     let lvl = 0;
     for (let i = XP_LEVELS.length - 1; i >= 0; i--) if (s.xp >= XP_LEVELS[i]) { lvl = i; break; }
@@ -58,7 +55,7 @@ const Camp = {
     this.save();
     return true;
   },
-  /* if the section is nearly wiped and broke, HQ scrapes up replacements */
+  // Bailout so a campaign cannot soft-lock.
   emergencyDraft() {
     const st = this.state;
     const fieldable = this.living().length;
@@ -71,7 +68,7 @@ const Camp = {
     return false;
   },
 
-  /* ---------------- mission results (called from game.js) ---------------- */
+  // Apply battle results back to the campaign roster.
   finishMission(report) {
     const st = this.state, d = this.diff();
     let deaths = 0;
@@ -80,7 +77,7 @@ const Camp = {
       if (!s) continue;
       s.missions++;
       s.kills += r.kills;
-      s.xp += Math.min(25, r.kills) * XP_KILL; // capped so the MG gunner isn't a veteran overnight
+      s.xp += Math.min(25, r.kills) * XP_KILL; // cap kill XP per mission
       if (r.dead) { s.status = 'dead'; s.hp = 0; deaths++; }
       else {
         s.hp = Math.max(1, Math.round(r.hpFrac * 100));
@@ -88,7 +85,7 @@ const Camp = {
         s.status = s.hp < BALANCE.woundedBelow ? 'wounded' : 'active';
       }
     }
-    // reserves rest and recover
+    // Reserves heal between missions.
     const deployedIds = new Set(report.perSoldier.map(r => r.id));
     for (const s of st.roster) {
       if (s.status === 'dead' || deployedIds.has(s.id)) continue;
@@ -110,7 +107,7 @@ const Camp = {
     return { deaths, rpGain, manGain };
   },
 
-  /* ---------------- screens ---------------- */
+  // Screen changes
   showScreen(id) {
     for (const sid of ['menu-screen', 'campaign-screen', 'muster-screen'])
       document.getElementById(sid).classList.toggle('visible', sid === id);
@@ -133,7 +130,7 @@ const Camp = {
   toMap() {
     this.showScreen('campaign-screen');
     Music.play('menu');
-    // first unlocked & uncompleted sector selected by default
+    // Select the first unfinished sector.
     this.selectedSector = this.state.completed.findIndex(c => !c);
     if (this.selectedSector < 0) this.selectedSector = SECTORS.length - 1;
     this.renderMap();
@@ -181,11 +178,11 @@ const Camp = {
     btn.textContent = done ? 'REINFORCE THE SECTOR' : 'MUSTER THE SECTION';
   },
 
-  /* ---------------- muster (roster + requisitions) ---------------- */
+  // Muster screen
   toMuster() {
     Music.play('prep');
     const drafted = this.emergencyDraft();
-    // default deployment: healthiest living soldiers, up to 4
+    // Default to the healthiest four soldiers.
     this.deployedIds = new Set(
       this.living().sort((a, b) => b.hp - a.hp).slice(0, 4).map(s => s.id));
     this.showScreen('muster-screen');
@@ -209,7 +206,7 @@ const Camp = {
     document.getElementById('muster-supplies').textContent =
       Math.round(sec.startSupplies * this.diff().supplies) + st.boostSupplies;
 
-    /* roster list */
+    // Roster list
     const list = document.getElementById('roster-list');
     list.innerHTML = '';
     const shown = [...st.roster].sort((a, b) => (a.status === 'dead') - (b.status === 'dead'));
@@ -251,13 +248,13 @@ const Camp = {
       list.appendChild(row);
     }
 
-    /* recruit */
+    // Recruit button
     const btnRec = document.getElementById('btn-recruit');
     btnRec.disabled = this.living().length >= BALANCE.rosterMax || st.manpower < BALANCE.recruitCost;
     btnRec.querySelector('.build-cost').textContent =
       this.living().length >= BALANCE.rosterMax ? 'SECTION FULL' : `${BALANCE.recruitCost} MANPOWER`;
 
-    /* requisition shop */
+    // Requisition shop
     const shop = document.getElementById('req-list');
     shop.innerHTML = '';
     for (const item of REQ_SHOP) {
@@ -274,7 +271,7 @@ const Camp = {
       shop.appendChild(btn);
     }
 
-    /* deploy summary + begin button */
+    // Deployment summary
     const cost = this.deploySlotCost();
     const n = this.deployedIds.size;
     document.getElementById('deploy-summary').textContent =
@@ -307,7 +304,7 @@ const Camp = {
     if (this.deployedIds.size === 0 || cost > st.manpower) return;
     st.manpower -= cost;
     const deployed = st.roster.filter(s => this.deployedIds.has(s.id) && s.status !== 'dead');
-    // consume one-shot boosts
+    // Consume one-shot boosts.
     const bonusSupplies = st.boostSupplies; st.boostSupplies = 0;
     const mgAmmo = st.mgAmmo; st.mgAmmo = false;
     this.save();
@@ -315,7 +312,7 @@ const Camp = {
   },
 };
 
-/* ---------------- wire up static buttons ---------------- */
+// Button wiring
 document.addEventListener('DOMContentLoaded', () => {
   const $ = id => document.getElementById(id);
 
@@ -340,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-recruit').addEventListener('click', () => { Camp.recruit(); Camp.renderMuster(); });
   $('btn-begin-op').addEventListener('click', () => Camp.beginOperation());
 
-  /* menu music on first interaction anywhere on the menu */
+  // First menu click starts audio.
   $('menu-screen').addEventListener('pointerdown', () => {
     Sfx.ensure();
     if ($('menu-screen').classList.contains('visible')) Music.play('menu');

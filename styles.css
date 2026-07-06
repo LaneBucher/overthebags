@@ -1,4 +1,4 @@
-/* ============ OVER THE BAGS - field command UI ============ */
+/* Field command UI */
 
 :root {
   --ink: #d8cba8;
@@ -29,7 +29,7 @@ html, body {
 
 button { font: inherit; cursor: pointer; }
 
-/* ============ Buttons ============ */
+/* Buttons */
 .btn {
   background: linear-gradient(#2c2716, #201c10);
   border: 1px solid var(--brass-dim);
@@ -60,7 +60,7 @@ button { font: inherit; cursor: pointer; }
 .btn-wave.hot { animation: pulse 1.6s infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 14px rgba(201,162,75,.5); border-color: var(--brass); } }
 
-/* ============ Overlays / full screens ============ */
+/* Full-screen overlays */
 .overlay {
   position: fixed; inset: 0; z-index: 50;
   display: none; align-items: center; justify-content: center;
@@ -103,7 +103,7 @@ button { font: inherit; cursor: pointer; }
 }
 .btn-diff span { font-family: var(--font-type); font-size: 11px; color: var(--ink-dim); text-transform: none; letter-spacing: 0; }
 
-/* ============ Shared header bar ============ */
+/* Header bar */
 #topbar, .camp-head {
   display: flex; align-items: center; gap: 20px;
   padding: 8px 16px;
@@ -122,7 +122,7 @@ button { font: inherit; cursor: pointer; }
 .stat-value.danger { color: var(--blood); }
 .topbar-buttons { display: flex; gap: 8px; }
 
-/* ============ Campaign map ============ */
+/* Campaign map */
 .camp-body { display: flex; flex: 1; min-height: 0; }
 #map-paper {
   flex: 1; position: relative; margin: 18px;
@@ -187,7 +187,7 @@ button { font: inherit; cursor: pointer; }
 .brief-block { font-size: 13.5px; line-height: 1.55; margin-top: 3px; }
 #btn-muster { width: 100%; margin-top: 18px; font-size: 18px; }
 
-/* ============ Muster screen ============ */
+/* Muster screen */
 .muster-body { display: flex; flex: 1; min-height: 0; gap: 14px; padding: 14px; }
 .muster-col { flex: 1; overflow-y: auto; margin-bottom: 0; display: flex; flex-direction: column; }
 .muster-col > .panel-h { flex-shrink: 0; }
@@ -218,7 +218,7 @@ button { font: inherit; cursor: pointer; }
 #deploy-note { min-height: 34px; margin-top: 10px; }
 #btn-begin-op { margin-top: auto; }
 
-/* ============ Game layout ============ */
+/* Game layout */
 #game-root { display: flex; flex-direction: column; height: 100vh; }
 
 #layout { display: flex; flex: 1; min-height: 0; }
@@ -243,7 +243,7 @@ button { font: inherit; cursor: pointer; }
 }
 #pause-veil span { font-family: var(--font-head); font-size: 34px; letter-spacing: 8px; color: var(--ink-dim); }
 
-/* ============ Side panel ============ */
+/* Side panel */
 #panel {
   width: 300px; flex-shrink: 0; overflow-y: auto;
   background: var(--panel);
@@ -269,7 +269,7 @@ button { font: inherit; cursor: pointer; }
 .log-line.log-warn { color: #d3a08c; }
 .log-line.log-warn .log-tag { color: var(--blood); }
 
-/* Roster (battle) */
+/* Battle roster */
 .trooper {
   display: flex; align-items: center; gap: 8px;
   padding: 5px 7px; margin-bottom: 4px;
@@ -297,7 +297,7 @@ button { font: inherit; cursor: pointer; }
 .pip.done { background: var(--brass); }
 .pip.now { background: var(--blood); border-color: var(--blood); animation: pulse 1.2s infinite; }
 
-/* ============ Results / dispatch paper ============ */
+/* Dispatch paper */
 .paper {
   position: relative;
   background: var(--paper); color: var(--paper-ink);
@@ -324,7 +324,7 @@ button { font: inherit; cursor: pointer; }
 .paper .btn { background: #2a2318; border-color: #2a2318; color: var(--paper); }
 .paper .btn:hover { background: #453a26; color: #fff; }
 
-/* Narrow screens: stack the command panel under the field */
+/* Small screens */
 @media (max-width: 860px) {
   html, body { overflow: auto; }
   #game-root { height: auto; min-height: 100vh; }

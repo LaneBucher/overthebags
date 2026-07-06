@@ -1,19 +1,14 @@
-/* =========================================================================
-   OVER THE BAGS - battle engine.
-   Campaign flow lives in campaign.js; data/tuning in config.js.
-   ========================================================================= */
+// Battle engine. Campaign flow lives in campaign.js.
 'use strict';
 
-/* =========================================================================
-   BATTLE STATE
-   ========================================================================= */
+// Battle state
 const G = {
   state: 'IDLE', // IDLE | PREP | WAVE | RESULTS | CHARGE | DONE
   paused: false,
   sectorIdx: 0,
   sector: null,
-  diffc: null,          // difficulty preset
-  wave: 0,              // index into sector.waves
+  diffc: null, // difficulty preset
+  wave: 0,     // index into sector.waves
   supplies: 0,
   breaches: 0,
   breachLimit: 6,
@@ -21,24 +16,24 @@ const G = {
   enemies: [],
   wires: [],
   mgNest: null,
-  mgAmmo: false,        // requisitioned belt surplus (+dmg this mission)
+  mgAmmo: false, // requisitioned MG boost
   mortar: null,
   sniperPost: null,
-  spawnPlan: [],        // pre-generated at prep so recon can read it
+  spawnPlan: [], // built in prep so recon can read it
   spawnQueue: [],
   waveT: 0,
   prepT: 0,
   reconUsed: false,
-  shelling: null,       // enemy prep bombardment {phase, t, targets}
-  arty: { cd: 0 },      // player barrage cooldown (charges live in Camp.state)
-  incoming: [],         // friendly shells falling {x,y,t}
+  shelling: null,  // enemy prep bombardment
+  arty: { cd: 0 }, // barrage cooldown
+  incoming: [],    // friendly shells falling
   grenades: [],
   tracers: [],
-  shells: [],           // tank shells
+  shells: [], // tank shells
   particles: [],
   ambientSmoke: [],
   selected: null,
-  placing: null,        // 'wire' | 'mg' | 'mortar' | 'sniper' | 'arty'
+  placing: null, // wire | mg | mortar | sniper | arty
   mouse: { x: 0, y: 0, inField: false },
   shake: 0,
   killsWave: 0, earnWave: 0,
@@ -50,9 +45,7 @@ const G = {
   dangerFlash: 0,
 };
 
-/* =========================================================================
-   DOM
-   ========================================================================= */
+// DOM
 const $id = id => document.getElementById(id);
 const canvas = $id('field'), ctx = canvas.getContext('2d');
 const ui = {
@@ -142,7 +135,7 @@ function updateHUD() {
   ui.btnSniper.disabled = !inPlay || !!G.sniperPost || G.supplies < BALANCE.sniperCost;
   ui.btnSniper.querySelector('.build-cost').textContent = G.sniperPost ? 'EMPLACED' : `${BALANCE.sniperCost} SUPPLIES`;
 
-  // support
+  // Support buttons
   const charges = st ? st.artCharges : 0;
   ui.btnArty.disabled = G.state !== 'WAVE' || charges <= 0 || G.arty.cd > 0;
   ui.artyCost.textContent = charges <= 0 ? 'NO CHARGES HELD'
@@ -153,7 +146,7 @@ function updateHUD() {
   ui.reconCost.textContent = G.reconUsed ? 'SORTIE FLOWN' : `${rCost} SUPPLIES - REVEAL THE NEXT ASSAULT`;
   ui.btnRepair.disabled = G.state !== 'PREP' || G.breaches <= 0 || G.supplies < BALANCE.repairCost;
 
-  // wave pips
+  // Wave pips
   ui.pips.innerHTML = '';
   const n = G.sector ? G.sector.waves.length : 5;
   for (let i = 0; i < n; i++) {
@@ -168,9 +161,7 @@ function reconPrice() {
   return scoutUp ? BALANCE.reconCostScout : BALANCE.reconCost;
 }
 
-/* =========================================================================
-   MISSION SETUP (called from campaign.js)
-   ========================================================================= */
+// Mission setup
 window.startMission = function (sectorIdx, deployedRoster, opts) {
   G.sectorIdx = sectorIdx;
   G.sector = SECTORS[sectorIdx];
@@ -221,9 +212,7 @@ function makeBattleSoldier(r, i, count) {
   };
 }
 
-/* =========================================================================
-   ENTITY HELPERS
-   ========================================================================= */
+// Entity helpers
 function spawnEnemy(type, x) {
   const t = ENEMY_TYPES[type];
   G.enemies.push({
@@ -268,7 +257,7 @@ function nearestEnemy(from, maxD) {
 function damageEnemy(e, dmg, killer) {
   if (e.dead) return;
   e.hp -= dmg;
-  // dt-scaled chip damage (wire) only puffs occasionally, or it floods particles
+  // Wire chip damage should not flood particles.
   if (dmg >= 1 || Math.random() < 0.04) puff(e.x, e.y, e.type === 'tank' ? '#888578' : '#5e2f26', 3);
   if (e.hp <= 0 && !e.dead) {
     e.dead = true;
@@ -312,9 +301,7 @@ function breach(e) {
   if (G.breaches >= G.breachLimit) missionEnd(false, 'line');
 }
 
-/* =========================================================================
-   PARTICLES / EFFECTS
-   ========================================================================= */
+// Particles and effects
 function puff(x, y, color, n) {
   for (let i = 0; i < n; i++) {
     G.particles.push({
@@ -365,7 +352,7 @@ function explodeVsEnemies(x, y, radius, dmg, damageWire) {
   }
 }
 
-/* Persistent ground scars drawn onto an offscreen layer */
+// Persistent ground scars are drawn onto an offscreen layer.
 let scarCanvas, scarCtx;
 function crater(x, y, r) {
   const c = scarCtx;
@@ -383,9 +370,7 @@ function stain(x, y, r) {
   scarCtx.fill();
 }
 
-/* =========================================================================
-   GROUND (pre-rendered once per mission)
-   ========================================================================= */
+// Ground rendering
 let groundCanvas;
 function renderGround() {
   groundCanvas = document.createElement('canvas');
@@ -417,7 +402,7 @@ function renderGround() {
     c.beginPath(); c.arc(x, y, r * 0.7, Math.random() * 3, Math.random() * 3 + 2.5); c.stroke();
   }
 
-  // enemy trench
+  // Enemy trench
   c.fillStyle = '#1d1910';
   c.fillRect(0, 0, W, ENEMY_LINE);
   sandbagRow(c, ENEMY_LINE - 4, '#4a4231', '#3c3627');
@@ -434,7 +419,7 @@ function renderGround() {
     c.beginPath(); c.moveTo(x, 90); c.lineTo(x, 110); c.stroke();
   }
 
-  // player trench
+  // Player trench
   c.fillStyle = '#221d12';
   c.fillRect(0, TRENCH_TOP, W, H - TRENCH_TOP);
   c.strokeStyle = 'rgba(94,78,48,.5)';
@@ -482,9 +467,7 @@ function roundRect(c, x, y, w, h, r) {
   c.closePath();
 }
 
-/* =========================================================================
-   WAVE FLOW
-   ========================================================================= */
+// Wave flow
 function buildSpawnPlan(waveDef) {
   const plan = [];
   for (const g of waveDef.groups) {
@@ -517,7 +500,7 @@ function enterPrep() {
   Music.play(planHasTank(G.spawnPlan) ? 'anthem' : 'prep');
   addLog(G.sector.preMsg[G.wave] || 'Stand ready.', G.wave >= 2);
 
-  // enemy bombardment of the trench before this assault?
+  // Some waves shell the trench before the assault.
   G.shelling = null;
   if (waveDef.prepShell) {
     G.shelling = { phase: 'wait', t: PREP_SHELL.warnDelay, shells: waveDef.prepShell.shells, targets: [] };
@@ -547,7 +530,7 @@ function startWave() {
 }
 
 function endWave() {
-  G.shells.length = 0; // don't let a frozen tank shell detonate next wave
+  G.shells.length = 0; // clear tank shells between waves
   const reward = Math.round((25 + G.wave * 5) * G.diffc.supplies) + G.earnWave;
   G.supplies += reward;
   const standing = G.soldiers.filter(s => !s.dead).length;
@@ -569,9 +552,7 @@ function endWave() {
   addLog(G.sector.postMsg[G.wave] || 'Hold fast.');
 }
 
-/* =========================================================================
-   MISSION END → campaign
-   ========================================================================= */
+// Mission end
 function battleReport(won) {
   return {
     sectorIdx: G.sectorIdx,
@@ -589,7 +570,7 @@ function missionEnd(won, reason) {
   const finale = won && G.sectorIdx === SECTORS.length - 1;
   const res = Camp.finishMission(battleReport(won));
   if (finale) {
-    // final sector: dispatch paper, then the charge
+    // Final sector shows a dispatch, then starts the charge.
     G.state = 'RESULTS';
     ui.resultsStamp.textContent = 'FINAL DISPATCH';
     ui.resultsTitle.textContent = 'THE GUNS FALL SILENT';
@@ -650,9 +631,7 @@ function campaignVictory() {
   ui.end.classList.add('visible');
 }
 
-/* =========================================================================
-   PLACEMENT, SUPPORT & ORDERS
-   ========================================================================= */
+// Placement, support, and orders
 function selectSoldier(s) {
   cancelPlacement();
   G.selected = s;
@@ -785,9 +764,7 @@ function orderMove(x, y) {
   Sfx.click();
 }
 
-/* =========================================================================
-   UPDATE
-   ========================================================================= */
+// Update loop
 function update(dt) {
   for (const s of G.ambientSmoke) {
     s.x += s.vx * dt;
@@ -838,7 +815,7 @@ function update(dt) {
   G.enemies = G.enemies.filter(e => !e.dead);
 }
 
-/* enemy pre-assault bombardment: warn → markers → impact */
+// Enemy prep shelling: wait, warn, impact.
 function updateShelling(dt) {
   const sh = G.shelling;
   if (!sh || sh.phase === 'done') return;
@@ -886,7 +863,7 @@ function updateSoldiers(dt) {
 
     s.manningMg = !!(G.mgNest && dist(s, G.mgNest) < MG.manRadius);
 
-    // medic: patch nearby men (faster when the guns are quiet)
+    // Medic heals nearby men.
     if (s.loadout === 'medic') {
       const lo = LOADOUTS.medic;
       const rate = lo.healPerSec * (G.state === 'PREP' ? lo.healPrepMult : 1) * dt;
@@ -900,7 +877,7 @@ function updateSoldiers(dt) {
       if (s.hp < s.maxHp) s.hp = Math.min(s.maxHp, s.hp + rate * 0.5);
     }
 
-    // bayonet trooper: cuts down anyone in reach
+    // Bayonet trooper cuts down nearby attackers.
     if (s.loadout === 'bayonet') {
       s.meleeCd -= dt;
       if (s.meleeCd <= 0) {
@@ -914,7 +891,7 @@ function updateSoldiers(dt) {
       }
     }
 
-    // grenadier: bomb the clusters
+    // Grenadier bombs clusters.
     if (s.loadout === 'grenadier' && G.state === 'WAVE') {
       s.grenCd -= dt;
       if (s.grenCd <= 0) {
@@ -935,7 +912,7 @@ function updateSoldiers(dt) {
       }
     }
 
-    // rifle
+    // Rifle fire
     s.cooldown -= dt;
     if (G.state === 'WAVE' && s.cooldown <= 0) {
       const target = nearestEnemy(s, s.range);
@@ -955,6 +932,8 @@ function updateSoldiers(dt) {
 function updateMg(dt) {
   const mg = G.mgNest;
   if (!mg) return;
+
+  // The closest soldier mans the gun.
   mg.gunner = null;
   let gd = MG.manRadius;
   for (const s of G.soldiers) {
@@ -985,7 +964,7 @@ function updateMortar(dt) {
   if (!m) return;
   m.cd -= dt;
   if (m.cd > 0) return;
-  // find the thickest cluster in range, away from our own trench
+  // Mortar targets the thickest safe cluster.
   let target = null;
   for (const e of G.enemies) {
     if (e.dead || e.y > 505 || dist(m, e) > MORTAR.range) continue;
@@ -995,7 +974,7 @@ function updateMortar(dt) {
   }
   if (!target) return;
   m.cd = MORTAR.cooldown;
-  Sfx.tone(300, 900, 0.25, 0.2, 'sine'); // hollow thoomp
+  Sfx.tone(300, 900, 0.25, 0.2, 'sine'); // mortar thump
   smoke(m.x, m.y - 6, 2);
   G.incoming.push({
     x: target.e.x + (Math.random() - 0.5) * 26,
@@ -1009,6 +988,8 @@ function updateSniper(dt) {
   if (!sp) return;
   sp.cd -= dt;
   if (sp.cd > 0) return;
+
+  // Pick by priority first, distance second.
   let target = null;
   for (const type of SNIPER.priority) {
     let bd = SNIPER.range;
@@ -1027,7 +1008,7 @@ function updateSniper(dt) {
   damageEnemy(target, SNIPER.dmg);
 }
 
-/* friendly shells (barrage + mortar) falling */
+// Friendly shells falling
 function updateIncoming(dt) {
   for (const sh of G.incoming) {
     sh.t -= dt;
@@ -1064,6 +1045,7 @@ function updateEnemies(dt) {
     if (e.dead) continue;
     e.wobble += dt * 3;
 
+    // Wire slows enemies and takes damage while doing it.
     let speedMult = 1;
     for (const w of G.wires) {
       if (w.hp <= 0) continue;
@@ -1131,6 +1113,7 @@ function updateShells(dt) {
 }
 
 function updateParticles(dt) {
+  // Effects age out instead of being manually removed elsewhere.
   for (const p of G.particles) {
     p.life -= dt;
     p.x += p.vx * dt; p.y += p.vy * dt;
@@ -1164,9 +1147,7 @@ function updateCharge(dt) {
   if (G.chargeT > 4.5) campaignVictory();
 }
 
-/* =========================================================================
-   RENDER
-   ========================================================================= */
+// Render
 function render() {
   ctx.save();
   if (G.shake > 0) {
@@ -1277,7 +1258,7 @@ function drawMortarPit() {
   ctx.strokeStyle = '#574c34';
   ctx.lineWidth = 3;
   ctx.beginPath(); ctx.arc(m.x, m.y, 14, 0, 7); ctx.stroke();
-  // tube
+  // Mortar tube
   ctx.save();
   ctx.translate(m.x, m.y);
   ctx.rotate(-Math.PI / 3);
@@ -1292,7 +1273,7 @@ function drawSniperPost() {
   const sp = G.sniperPost;
   if (!sp) return;
   sandbagArc(sp.x, sp.y);
-  // long rifle
+  // Long rifle
   ctx.save();
   ctx.translate(sp.x, sp.y - 5);
   ctx.rotate(-Math.PI / 2 + Math.sin(performance.now() / 900) * 0.15);
@@ -1314,7 +1295,7 @@ function drawAmbientSmoke() {
   }
 }
 
-/* enemy shelling warnings + friendly barrage markers */
+// Shell warning markers
 function drawShellWarnings() {
   const sh = G.shelling;
   if (sh && sh.phase === 'warn') {
@@ -1331,7 +1312,7 @@ function drawShellWarnings() {
       ctx.stroke();
     }
   }
-  // friendly barrage target flare
+  // Friendly barrage target flare
   for (const inc of G.incoming) {
     if (inc.mortar) continue;
     const pulse = 0.4 + Math.sin(performance.now() / 90) * 0.2;
@@ -1386,12 +1367,12 @@ function drawSoldiers() {
     ctx.strokeStyle = 'rgba(240,235,200,.35)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.ellipse(s.x, s.y - 3.5, 5.5, 3.5, 0, Math.PI * 1.1, Math.PI * 1.7); ctx.stroke();
-    // role pip
+    // Role pip
     ctx.fillStyle = LOADOUTS[s.loadout].color;
     ctx.strokeStyle = '#14110c';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(s.x + 6.5, s.y + 4, 3, 0, 7); ctx.fill(); ctx.stroke();
-    // veteran chevron
+    // Veteran chevron
     if (s.level > 0) {
       ctx.strokeStyle = s.level >= 2 ? '#c9a24b' : '#a3a476';
       ctx.lineWidth = 1.5;
@@ -1399,7 +1380,7 @@ function drawSoldiers() {
       ctx.moveTo(s.x - 4, s.y + 12); ctx.lineTo(s.x, s.y + 9); ctx.lineTo(s.x + 4, s.y + 12);
       ctx.stroke();
     }
-    // rifle
+    // Rifle
     ctx.save();
     ctx.translate(s.x, s.y);
     ctx.rotate(s.facing);
@@ -1482,7 +1463,7 @@ function drawShells() {
 }
 
 function drawIncoming() {
-  // falling friendly shells: brief streak just before impact
+  // Falling shells streak just before impact.
   for (const sh of G.incoming) {
     if (sh.t < 0.35) {
       const f = sh.t / 0.35;
@@ -1586,9 +1567,7 @@ function drawGhost() {
   ctx.setLineDash([]);
 }
 
-/* =========================================================================
-   INPUT
-   ========================================================================= */
+// Input
 function fieldCoords(ev) {
   const r = canvas.getBoundingClientRect();
   return {
@@ -1676,9 +1655,7 @@ ui.btnEndContinue.addEventListener('click', () => {
   Camp.toMap();
 });
 
-/* =========================================================================
-   MAIN LOOP
-   ========================================================================= */
+// Main loop
 Music.init();
 
 let lastT = performance.now();

@@ -1,20 +1,18 @@
-/* =========================================================================
-   OVER THE BAGS - config: every tuning value and data table lives here.
-   ========================================================================= */
+// Game data and tuning.
 'use strict';
 
-/* ---------------- audio ---------------- */
+// Audio
 const AUDIO_TRACKS = {
-  menu:   'audio/Over The Bags Main Theme.mp3', // menu + campaign map
-  prep:   'audio/Homeland.mp3',                 // prep phase / muster
-  anthem: 'audio/Anthem.mp3',                   // prep before an armour wave, victory
-  battle: 'audio/Never Before.mp3',             // active battle
-  armor:  'audio/March of the Tanks.mp3',       // waves with tanks
+  menu:   'audio/Over The Bags Main Theme.mp3', // menu and map
+  prep:   'audio/Homeland.mp3',                 // prep and muster
+  anthem: 'audio/Anthem.mp3',                   // armour prep and victory
+  battle: 'audio/Never Before.mp3',             // battle
+  armor:  'audio/March of the Tanks.mp3',       // tank waves
 };
 const MUSIC_VOLUME = 0.55;
 const SFX_VOLUME = 0.5;
 
-/* ---------------- battlefield geometry (canvas 900x700) ---------------- */
+// Battlefield geometry
 const W = 900, H = 700;
 const ENEMY_LINE = 70;
 const TRENCH_TOP = 530;
@@ -22,7 +20,7 @@ const TRENCH_BOT = 648;
 const BREACH_Y = 676;
 const WIRE_ZONE = { top: 270, bot: 505 };
 
-/* ---------------- core balance ---------------- */
+// Core balance
 const BALANCE = {
   wireCost: 20,
   mgCost: 50,
@@ -30,41 +28,42 @@ const BALANCE = {
   sniperCost: 45,
   repairCost: 30,
   reconCost: 25,
-  reconCostScout: 15,     // when a scout is deployed and alive
-  maxBreaches: 6,         // modified by difficulty
-  deploySlotCost: 15,     // manpower per soldier beyond the 4th
-  recruitCost: 25,        // manpower for a green replacement
+  reconCostScout: 15, // scout discount
+  maxBreaches: 6,     // difficulty adjusts this
+  deploySlotCost: 15, // per soldier after the 4th
+  recruitCost: 25,
   rosterMax: 10,
   deployMax: 6,
-  restHeal: 25,           // hp recovered between missions automatically
-  woundedBelow: 50,       // end a mission under this hp -> WOUNDED status
+  restHeal: 25,      // reserve healing between missions
+  woundedBelow: 50,  // mission-end wounded cutoff
 };
 
-/* ---------------- soldiers, XP, loadouts ---------------- */
+// Soldiers and XP
 const SOLDIER = { hp: 100, speed: 85, range: 210, fireRate: 0.85, dmg: 9 };
 const MG = { range: 300, fireRate: 0.12, dmg: 6, manRadius: 60 };
 
-/* xp thresholds per level; level grants +dmg and faster fire */
-const XP_LEVELS = [0, 25, 60];               // Green, Seasoned, Veteran
+// XP thresholds for Green, Seasoned, Veteran.
+const XP_LEVELS = [0, 25, 60];
 const LEVEL_NAMES = ['GREEN', 'SEASONED', 'VETERAN'];
-const LEVEL_DMG = 1;                          // +dmg per level
-const LEVEL_FIRERATE = 0.07;                  // fire delay reduced 7% per level
-const LEVEL_HP = 8;                           // +max hp per level
-const XP_MISSION = 12;                        // survive a mission
+const LEVEL_DMG = 1;
+const LEVEL_FIRERATE = 0.07;
+const LEVEL_HP = 8;
+const XP_MISSION = 12;
 const XP_KILL = 1;
 
+// Loadouts add small stat or behavior overrides to the base soldier.
 const LOADOUTS = {
   rifleman: {
     name: 'Rifleman', tag: 'RFL', color: '#8a8c60',
     desc: 'The standing default. Balanced range and rate of fire. Reliable anywhere on the line.',
-    stats: {},                                // pure baseline
+    stats: {},
   },
   bayonet: {
     name: 'Bayonet Trooper', tag: 'BYT', color: '#9c8a52',
     desc: 'Shorter reach with the rifle, but murderous up close. Takes less melee damage and cuts down anyone who reaches the bags. Post him where they break through.',
     stats: { range: 150, dmg: 8 },
-    meleeResist: 0.65,                        // takes 65% of melee damage
-    meleeDmg: 16, meleeRate: 0.8,             // swings back at attackers
+    meleeResist: 0.65,
+    meleeDmg: 16, meleeRate: 0.8,
   },
   medic: {
     name: 'Medic', tag: 'MED', color: '#b0a184',
@@ -92,7 +91,7 @@ const NAME_POOL = [
   'Pvt. Ferro', 'Pvt. Ngata', 'Cpl. Voss', 'Pvt. Lindqvist',
 ];
 
-/* ---------------- enemies ---------------- */
+// Enemies
 const ENEMY_TYPES = {
   infantry: { hp: 55,  speed: 33, dmg: 7,  hitRate: 0.8, reward: 2,  r: 9,  wireSlow: 0.35, label: 'infantry' },
   raider:   { hp: 30,  speed: 62, dmg: 9,  hitRate: 0.6, reward: 3,  r: 8,  wireSlow: 0.35, label: 'raiders' },
@@ -100,29 +99,29 @@ const ENEMY_TYPES = {
   tank:     { hp: 500, speed: 12, dmg: 0,  hitRate: 0,   reward: 20, r: 20, wireSlow: 0.85, label: 'armour' },
 };
 
-/* ---------------- support: player artillery, mortar, sniper ---------------- */
+// Support weapons
 const ARTILLERY = {
   chargeCostRP: 1, maxCharges: 3,
   shells: 5, delay: 2.0, scatter: 65, radius: 48, dmg: 60,
   cooldown: 8,
-  maxY: 500,               // can only be called onto no man's land
+  maxY: 500, // no man's land only
 };
 const MORTAR = {
   range: 460, cooldown: 5.5, flight: 1.6, radius: 44, dmg: 32, minCluster: 2,
 };
 const SNIPER = {
   range: 430, cooldown: 2.6, dmg: 34,
-  priority: ['raider', 'heavy', 'infantry'],   // never targets tanks
+  priority: ['raider', 'heavy', 'infantry'],
 };
 
-/* ---------------- enemy prep-phase shelling ---------------- */
+// Enemy prep shelling
 const PREP_SHELL = {
-  warnDelay: 3,     // seconds after prep begins before markers appear
-  fuse: 3.5,        // seconds markers show before impact
+  warnDelay: 3,
+  fuse: 3.5,
   radius: 55, dmg: 28,
 };
 
-/* ---------------- difficulty ---------------- */
+// Difficulty
 const DIFFICULTY = {
   recruit: { name: 'Recruit',  enemyHp: 0.85, enemySpd: 0.92, supplies: 1.25, manpower: 1.3,
              breachMod: +2, rpBonus: 0, shellDmg: 0.7,
@@ -135,7 +134,7 @@ const DIFFICULTY = {
              blurb: 'Thin supplies, a fragile line, a determined enemy. Fair, but merciless.' },
 };
 
-/* ---------------- requisition shop (spent at the muster screen) ---------------- */
+// Muster shop
 const REQ_SHOP = [
   { id: 'supplies',  name: 'Supply Requisition',  cost: 1, desc: '+60 supplies for the coming operation.' },
   { id: 'manpower',  name: 'Replacement Draft',   cost: 1, desc: '+25 manpower to the sector pool.' },
@@ -144,10 +143,10 @@ const REQ_SHOP = [
   { id: 'mgammo',    name: 'MG Ammunition',       cost: 1, desc: 'Belt-fed surplus: the MG nest hits harder next operation.' },
 ];
 
-/* ---------------- sectors / campaign ----------------
-   Wave groups: n enemies, arriving in squads of `burst`, first at `start`s,
-   next squad every `gap`s. lane: 'left' | 'right' | 'edges' biases spawn x.
-   prepShell: enemy shelling of YOUR trench during the prep before that wave. */
+// Sectors and waves
+// Groups spawn `n` enemies in bursts, starting at `start` seconds.
+// `gap` spaces bursts; `lane` biases the spawn x position.
+// `prepShell` shells the trench before that wave.
 const SECTORS = [
   {
     id: 's7', name: 'SECTOR 7 - THE MUD LINE',
@@ -275,5 +274,5 @@ const SECTORS = [
   },
 ];
 
-/* base requisition points awarded for completing a mission */
-const RP_BASE = 2;           // +1 no deaths, +1 line integrity kept above half, +difficulty bonus
+// Base RP for a won mission.
+const RP_BASE = 2;

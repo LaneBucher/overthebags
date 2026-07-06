@@ -1,6 +1,4 @@
-/* =========================================================================
-   OVER THE BAGS - audio: music manager + synthesized SFX (no sample files)
-   ========================================================================= */
+// Music and synthesized sound effects.
 'use strict';
 
 const Music = {
@@ -22,10 +20,12 @@ const Music = {
     if (!src) return;
     clearInterval(this.fadeTimer);
     const el = this.el, target = this.muted ? 0 : MUSIC_VOLUME;
+
+    // Crossfade into the requested track.
     const swap = () => {
       el.src = src;
       el.volume = 0;
-      el.play().catch(() => {}); // autoplay guard; user gesture arrives eventually
+      el.play().catch(() => {}); // waits for a user gesture
       this.fadeTimer = setInterval(() => {
         el.volume = Math.min(target, el.volume + 0.05);
         if (el.volume >= target) clearInterval(this.fadeTimer);
@@ -48,6 +48,7 @@ const Music = {
 const Sfx = {
   ctx: null, gain: null, muted: false,
   ensure() {
+    // Create the shared audio graph only when a sound is first played.
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return false;
@@ -89,13 +90,14 @@ const Sfx = {
   mg()     { this.noise(0.05, 1900, 1.5, 0.32); },
   sniper() { this.noise(0.14, 1100, 1.0, 0.55); this.tone(180, 40, 0.1, 0.15, 'square'); },
   boom(big = 1) {
+    // Low noise plus a falling tone reads as an explosion.
     this.noise(0.7 * big, 320, 0.7, 0.7 * big, 'lowpass');
     this.tone(110, 28, 0.5 * big, 0.4 * big);
   },
   thud()   { this.noise(0.07, 300, 1, 0.3, 'lowpass'); },
   click()  { this.noise(0.03, 2500, 2, 0.15); },
   whistle(){ this.tone(1800, 2400, 1.4, 0.25, 'sine'); },
-  shellIncoming() { this.tone(2600, 700, 1.6, 0.18, 'sine'); },   // falling whistle
+  shellIncoming() { this.tone(2600, 700, 1.6, 0.18, 'sine'); }, // falling whistle
   build()  { this.noise(0.15, 700, 1, 0.3, 'lowpass'); },
   setMuted(m) { this.muted = m; },
 };
