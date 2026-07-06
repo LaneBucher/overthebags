@@ -736,7 +736,6 @@ function fireBarrage(x, y) {
       x: Math.max(30, Math.min(W - 30, x + Math.cos(a) * r)),
       y: Math.min(510, Math.max(90, y + Math.sin(a) * r)),
       t: ARTILLERY.delay + i * 0.22,
-      marker: { x, y },
     });
   }
 }
@@ -748,10 +747,9 @@ function useRecon() {
   G.supplies -= cost;
   G.reconUsed = true;
   const counts = {};
-  let sumX = 0, third = [0, 0, 0];
+  const third = [0, 0, 0];
   for (const p of G.spawnPlan) {
     counts[p.type] = (counts[p.type] || 0) + 1;
-    sumX += p.x;
     third[Math.min(2, Math.floor(p.x / (W / 3)))]++;
   }
   const laneIdx = third.indexOf(Math.max(...third));
@@ -1682,9 +1680,6 @@ ui.btnEndContinue.addEventListener('click', () => {
    MAIN LOOP
    ========================================================================= */
 Music.init();
-
-// dev/debug hook (harmless in play; lets you inspect state from the console)
-window.__otb = { G, update, startWave, missionEnd };
 
 let lastT = performance.now();
 let rosterTimer = 0;
